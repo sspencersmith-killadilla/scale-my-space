@@ -170,6 +170,17 @@ export interface CutListRow {
   thicknessIn: number;
   material: string;
   notes: string;
+  location: string;
+  cutNotes: string;
+  /** Openings that must be cut out of this panel, in model inches. */
+  openings: Array<{
+    label: string;
+    kind: "window" | "door";
+    fromLeftIn: number;
+    fromBottomIn: number;
+    widthIn: number;
+    heightIn: number;
+  }>;
 }
 
 const SNAP = 32; // snap to nearest 1/32"
@@ -178,6 +189,11 @@ export function snapInches(value: number): number {
   return Math.max(1 / SNAP, Math.round(value * SNAP) / SNAP);
 }
 
+const ROLE_FACE: Partial<Record<PartRole, FaceKey>> = {
+  "front-wall": "front",
+  "back-wall": "back",
+};
+
 /**
  * Butt-joint compensation: front/back panels overlap the side panels, so the
  * side panels lose one stock thickness at each end. Roof panels gain the overhang.
@@ -185,6 +201,7 @@ export function snapInches(value: number): number {
 export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow[] {
   const d = resolveDenominator(model, scale);
   const t = scale.stockThicknessIn;
+  let sideWallSeen = 0;
 
   return model.parts.map((part) => {
     let length = part.widthIn / d;
@@ -194,11 +211,32 @@ export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow
 
     if (part.role === "side-wall") {
       length = Math.max(length - 2 * t, length * 0.25);
-      notes.push("Trimmed 2× stock thickness for butt joints");
+      notes.push(
+        `Trimmed 2× ${formatInches(t)} stock thickness so the front and back panels wrap this panel's ends (butt joint)`,
+      );
     }
     if (part.role === "floor" || part.role === "base") {
       notes.push("Fits inside the wall box");
     }
+
+    // Which face's openings belong to this panel?
+    let face: FaceKey | undefined = ROLE_FACE[part.role];
+    if (part.role === "side-wall") {
+      face = sideWallSeen === 0 ? "left" : "right";
+      sideWallSeen += 1;
+    }
+    const openings = face
+      ? model.openings
+          .filter((o) => o.face === face)
+          .map((o) => ({
+            label: o.label || `${o.kind} on ${o.face}`,
+            kind: o.kind,
+            fromLeftIn: snapInches(o.xIn / d),
+            fromBottomIn: snapInches(o.yIn / d),
+            widthIn: snapInches(o.widthIn / d),
+            heightIn: snapInches(o.heightIn / d),
+          }))
+      : [];
 
     return {
       id: part.id,
@@ -210,9 +248,13 @@ export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow
       thicknessIn: t,
       material: scale.material,
       notes: notes.join(". "),
+      location: part.location ?? "",
+      cutNotes: part.cutNotes ?? "",
+      openings,
     };
   });
 }
+
 
 /** Total board feet-ish estimate: square inches of stock needed, plus 20% waste. */
 export function sheetAreaSqIn(rows: CutListRow[]): number {
