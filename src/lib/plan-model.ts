@@ -524,6 +524,8 @@ export function emptyPlanModel(): PlanModel {
 /** Defensive normalizer for AI/db JSON so the UI never crashes on a bad field. */
 export function normalizePlanModel(raw: unknown): PlanModel {
   const model = normalizeRaw(raw);
+  sanitizeMasses(model);
+  clampOpenings(model);
   // Keep `overall` in agreement with the massing so every scale calculation,
   // drawing and 3D view uses the same bounding box.
   if (model.masses.length) {
@@ -542,6 +544,52 @@ export function normalizePlanModel(raw: unknown): PlanModel {
   }
   return model;
 }
+
+/**
+ * Drop empty masses and pull stray child masses back onto their parent.
+ *
+ * A mis-measured detail pass can return a sub-mass thousands of inches away,
+ * which would otherwise inflate the bounding box and wreck every scale
+ * calculation, so children are snapped onto the parent instead of floating.
+ */
+function sanitizeMasses(model: PlanModel) {
+  const kept = model.masses.filter((m) => massWidth(m) > 0 && massTotalHeight(m) > 0);
+  const byId = new Map(kept.map((m) => [m.id, m]));
+  for (const m of kept) {
+    if (!m.parentId) continue;
+    const parent = m.parentId === m.id ? undefined : byId.get(m.parentId);
+    if (!parent) {
+      delete m.parentId;
+      continue;
+    }
+    const parentTop = parent.baseYIn + massTotalHeight(parent);
+    const spanX = (massWidth(parent) + massWidth(m)) / 2;
+    const spanZ = (massDepth(parent) + massDepth(m)) / 2;
+    if (Math.abs(m.xIn - parent.xIn) > spanX) m.xIn = parent.xIn;
+    if (Math.abs(m.zIn - parent.zIn) > spanZ) m.zIn = parent.zIn;
+    if (m.baseYIn < parent.baseYIn || m.baseYIn > parentTop) {
+      m.baseYIn = Math.min(Math.max(m.baseYIn, parent.baseYIn), parentTop);
+    }
+  }
+  model.masses = kept;
+}
+
+/** Keep every opening inside the face of the mass it belongs to. */
+function clampOpenings(model: PlanModel) {
+  if (!model.masses.length) return;
+  for (const o of model.openings) {
+    const mass = openingMass(model, o);
+    const faceWidth = o.face === "left" || o.face === "right" ? massDepth(mass) : massWidth(mass);
+    const faceHeight = massTotalHeight(mass);
+    if (faceWidth <= 0 || faceHeight <= 0) continue;
+    o.widthIn = Math.min(Math.max(o.widthIn, 0), faceWidth);
+    o.heightIn = Math.min(Math.max(o.heightIn, 0), faceHeight);
+    o.xIn = Math.min(Math.max(o.xIn, 0), Math.max(0, faceWidth - o.widthIn));
+    o.yIn = Math.min(Math.max(o.yIn, 0), Math.max(0, faceHeight - o.heightIn));
+  }
+  model.openings = model.openings.filter((o) => o.widthIn > 0 && o.heightIn > 0);
+}
+
 
 function normalizeRaw(raw: unknown): PlanModel {
   const base = emptyPlanModel();
