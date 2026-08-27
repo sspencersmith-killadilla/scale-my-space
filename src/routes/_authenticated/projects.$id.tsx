@@ -251,6 +251,66 @@ function PlanViewer() {
       </div>
     );
   }
+
+  const photoPanel = (
+    <section className="mt-8 rounded-lg border-2 border-foreground bg-card p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="tech-label text-blueprint">Reference photos</h2>
+        <p className="text-xs text-muted-foreground">
+          {data.photos.length} of {MAX_PHOTOS} · all views are read together when drafting
+        </p>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+        {data.photos.map((photo, i) => (
+          <div
+            key={photo.id}
+            className="relative aspect-square overflow-hidden rounded border border-border bg-muted"
+          >
+            {photo.url ? (
+              <img
+                src={photo.url}
+                alt={`Reference photo ${i + 1} of the subject`}
+                loading="lazy"
+                className="size-full object-cover"
+              />
+            ) : null}
+            <span className="absolute left-1 top-1 rounded bg-foreground/80 px-1 tech-label text-[10px] text-background">
+              {i + 1}
+            </span>
+            <button
+              type="button"
+              aria-label={`Remove reference photo ${i + 1}`}
+              onClick={() => removePhoto(photo)}
+              className="absolute right-1 top-1 rounded bg-foreground/80 p-1 text-background"
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        ))}
+        {data.photos.length < MAX_PHOTOS && (
+          <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded border-2 border-dashed border-border text-muted-foreground hover:border-accent hover:text-accent">
+            {uploading ? <Loader2 className="size-5 animate-spin" /> : <ImagePlus className="size-5" />}
+            <span className="tech-label">add</span>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              disabled={uploading}
+              onChange={(e) => {
+                addPhotos(e.target.files);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        )}
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Added or removed a view? Hit Redraft so the measurements are recalculated from the full set.
+      </p>
+    </section>
+  );
+
   if (!model || !scale || !overall) {
     return (
       <div className="mx-auto max-w-6xl px-6 py-16 text-center">
