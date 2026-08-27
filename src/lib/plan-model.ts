@@ -476,6 +476,27 @@ export function emptyPlanModel(): PlanModel {
 
 /** Defensive normalizer for AI/db JSON so the UI never crashes on a bad field. */
 export function normalizePlanModel(raw: unknown): PlanModel {
+  const model = normalizeRaw(raw);
+  // Keep `overall` in agreement with the massing so every scale calculation,
+  // drawing and 3D view uses the same bounding box.
+  if (model.masses.length) {
+    const b = massBounds(model.masses);
+    if (b.widthIn > 0 && b.depthIn > 0 && b.maxY > 0) {
+      model.overall = {
+        widthIn: b.widthIn,
+        depthIn: b.depthIn,
+        heightIn: b.maxY,
+        wallHeightIn: Math.min(
+          Math.max(...model.masses.map((m) => m.baseYIn + m.heightIn)),
+          b.maxY,
+        ),
+      };
+    }
+  }
+  return model;
+}
+
+function normalizeRaw(raw: unknown): PlanModel {
   const base = emptyPlanModel();
   if (!raw || typeof raw !== "object") return base;
   const r = raw as Record<string, unknown>;
