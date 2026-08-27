@@ -580,7 +580,8 @@ function clampOpenings(model: PlanModel) {
   for (const o of model.openings) {
     const mass = openingMass(model, o);
     const faceWidth = o.face === "left" || o.face === "right" ? massDepth(mass) : massWidth(mass);
-    const faceHeight = massTotalHeight(mass);
+    // Openings sit in the wall, not in the roof/parapet above it.
+    const faceHeight = mass.heightIn > 0 ? mass.heightIn : massTotalHeight(mass);
     if (faceWidth <= 0 || faceHeight <= 0) continue;
     o.widthIn = Math.min(Math.max(o.widthIn, 0), faceWidth);
     o.heightIn = Math.min(Math.max(o.heightIn, 0), faceHeight);
