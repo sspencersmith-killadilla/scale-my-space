@@ -63,6 +63,9 @@ function Landing() {
             <span className="tech-label text-blueprint">plan works</span>
           </div>
           <nav className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/guide">Guide</Link>
+            </Button>
             {!loading &&
               (user ? (
                 <Button asChild size="sm">
@@ -104,6 +107,9 @@ function Landing() {
                   <Link to={target}>
                     Generate a plan <ArrowRight className="ml-2 size-4" />
                   </Link>
+                </Button>
+                <Button asChild variant="outline" size="lg">
+                  <Link to="/guide">Read the guide</Link>
                 </Button>
                 <span className="tech-label text-muted-foreground">
                   1:12 · 1:24 · 1:48 · custom
