@@ -160,23 +160,17 @@ function House({ model, scale, thicknessIn }: Props) {
         </mesh>
       ))}
 
-      {/* gable ends */}
-      {gabled && (
-        <>
-          {[dims.d / 2 - dims.t / 2, -dims.d / 2 + dims.t / 2].map((z, i) => (
-            <mesh key={i} position={[0, dims.wall, z]} castShadow>
-              <extrudeGeometry
-                args={[
-                  (() => {
-                    const shape = new (require("three") as never) as never;
-                    return shape;
-                  })() as never,
-                ]}
-              />
-            </mesh>
-          ))}
-        </>
-      )}
+      {/* gable end panels (front & back triangles) */}
+      {gabled &&
+        [dims.d / 2 - dims.t / 2, -dims.d / 2 + dims.t / 2].map((z, i) => (
+          <mesh key={i} position={[0, dims.wall, z]} castShadow>
+            <extrudeGeometry
+              args={[gableShape(dims.w, roofRise), { depth: dims.t, bevelEnabled: false }]}
+            />
+            <meshStandardMaterial color={WOOD} roughness={0.75} />
+          </mesh>
+        ))}
+
 
       {/* roof */}
       {gabled ? (
