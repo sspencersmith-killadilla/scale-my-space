@@ -178,16 +178,23 @@ function House({ model, scale, thicknessIn }: Props) {
         </mesh>
       ))}
 
-      {/* gable end panels (front & back triangles) */}
+      {/* gable end panels — the ridge runs left-to-right, so the triangles
+          close off the two side walls */}
       {gabled &&
-        [dims.d / 2 - dims.t / 2, -dims.d / 2 + dims.t / 2].map((z, i) => (
-          <mesh key={i} position={[0, dims.wall, z]} castShadow>
+        [dims.w / 2 - dims.t / 2, -dims.w / 2 + dims.t / 2].map((x, i) => (
+          <mesh
+            key={i}
+            position={[x, dims.wall, 0]}
+            rotation-y={Math.PI / 2}
+            castShadow
+          >
             <extrudeGeometry
-              args={[gableShape(dims.w, roofRise), { depth: dims.t, bevelEnabled: false }]}
+              args={[gableShape(dims.d, roofRise), { depth: dims.t, bevelEnabled: false }]}
             />
-            <meshStandardMaterial color={WOOD} roughness={0.75} />
+            <meshStandardMaterial color={WOOD_DARK} roughness={0.75} />
           </mesh>
         ))}
+
 
 
       {/* roof */}
