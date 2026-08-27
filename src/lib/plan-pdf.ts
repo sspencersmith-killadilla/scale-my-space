@@ -319,9 +319,33 @@ export function buildPlanPdf(
     );
     y += 24;
   }
+  const massSummary = ensureMasses(model).map((m) => {
+    const foot =
+      m.kind === "cylinder"
+        ? `round, ${formatInches(m.diameterIn / o.denominator)} across`
+        : `${formatInches(m.widthIn / o.denominator)} × ${formatInches(m.depthIn / o.denominator)}`;
+    const top =
+      m.top.riseIn > 0
+        ? `${m.top.type} top rising ${formatInches(m.top.riseIn / o.denominator)}`
+        : `${m.top.type} top`;
+    return `${m.name}: ${foot}, walls ${formatInches(m.heightIn / o.denominator)} high, ${top}.`;
+  });
+  y = bulletSection("The model is built from these volumes", massSummary, y);
+  y = bulletSection(
+    "Architectural features",
+    model.features.map(
+      (f) =>
+        `${f.name} (${f.type.replace("-", " ")}${f.count > 1 ? ` ×${f.count}` : ""})${
+          f.description ? `: ${f.description}` : ""
+        }`,
+    ),
+    y,
+  );
+  y = bulletSection("Where this model simplifies the real subject", model.knownDifferences, y);
   y = bulletSection("Tools you need", model.toolsNeeded, y);
   y = bulletSection("Supplies", [...model.suppliesNeeded, ...model.extraMaterials], y);
   y = bulletSection("Safety", model.safetyNotes, y);
+
   footer(doc, page);
 
   /* ---------- Cut list ---------- */
