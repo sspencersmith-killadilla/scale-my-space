@@ -16,6 +16,17 @@ const GLASS = "#3f5b78";
 const DOOR = "#7a4a35";
 const BASE = "#a98a5c";
 
+/** Triangular gable end, centred on x, rising from y=0 to the ridge. */
+function gableShape(width: number, rise: number) {
+  const s = new THREE.Shape();
+  s.moveTo(-width / 2, 0);
+  s.lineTo(width / 2, 0);
+  s.lineTo(0, rise);
+  s.closePath();
+  return s;
+}
+
+
 interface Props {
   model: PlanModel;
   scale: ScaleSettings;
