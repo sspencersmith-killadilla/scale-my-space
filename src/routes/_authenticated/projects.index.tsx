@@ -21,6 +21,7 @@ export const Route = createFileRoute("/_authenticated/projects/")({
 });
 
 function ProjectsList() {
+  const walkthrough = useWalkthrough();
   const { data, isLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: async () => {
