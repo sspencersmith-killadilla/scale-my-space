@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as Dev3dRouteImport } from './routes/dev-3d'
 import { Route as GuideRouteImport } from './routes/guide'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects.index'
 import { Route as AuthenticatedProjectsIdRouteImport } from './routes/_authenticated/projects.$id'
@@ -29,6 +30,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Dev3dRoute = Dev3dRouteImport.update({
+  id: '/dev-3d',
+  path: '/dev-3d',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GuideRoute = GuideRouteImport.update({
@@ -57,6 +63,7 @@ const AuthenticatedProjectsNewRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/dev-3d': typeof Dev3dRoute
   '/guide': typeof GuideRoute
   '/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/projects/new': typeof AuthenticatedProjectsNewRoute
@@ -65,6 +72,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/dev-3d': typeof Dev3dRoute
   '/guide': typeof GuideRoute
   '/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/projects/new': typeof AuthenticatedProjectsNewRoute
@@ -75,6 +83,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/dev-3d': typeof Dev3dRoute
   '/guide': typeof GuideRoute
   '/_authenticated/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/_authenticated/projects/new': typeof AuthenticatedProjectsNewRoute
@@ -83,14 +92,28 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/auth' | '/guide' | '/projects/$id' | '/projects/new' | '/projects/'
+    | '/'
+    | '/auth'
+    | '/dev-3d'
+    | '/guide'
+    | '/projects/$id'
+    | '/projects/new'
+    | '/projects/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/guide' | '/projects/$id' | '/projects/new' | '/projects'
+  to:
+    | '/'
+    | '/auth'
+    | '/dev-3d'
+    | '/guide'
+    | '/projects/$id'
+    | '/projects/new'
+    | '/projects'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/dev-3d'
     | '/guide'
     | '/_authenticated/projects/$id'
     | '/_authenticated/projects/new'
@@ -101,6 +124,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  Dev3dRoute: typeof Dev3dRoute
   GuideRoute: typeof GuideRoute
 }
 
@@ -125,6 +149,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev-3d': {
+      id: '/dev-3d'
+      path: '/dev-3d'
+      fullPath: '/dev-3d'
+      preLoaderRoute: typeof Dev3dRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/guide': {
@@ -177,6 +208,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  Dev3dRoute: Dev3dRoute,
   GuideRoute: GuideRoute,
 }
 export const routeTree = rootRouteImport
