@@ -355,7 +355,18 @@ function PlanViewer() {
             {model.stories === 1 ? "" : "s"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={detailLevel} onValueChange={(v) => setDetailLevel(v as DetailLevel)}>
+            <SelectTrigger className="h-9 w-[168px]" aria-label="Shape detail level">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="simple">Simple detail</SelectItem>
+              <SelectItem value="standard">Standard detail</SelectItem>
+              <SelectItem value="museum">Museum detail</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Button variant="outline" size="sm" onClick={regenerate} disabled={regenerating}>
             {regenerating ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
