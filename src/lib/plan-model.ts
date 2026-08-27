@@ -104,9 +104,29 @@ export interface PlanMass {
   baseYIn: number;
   rotationDeg: number;
   top: PlanMassTop;
+  /** Number of faces for a prism mass (6 = hexagonal tower). 0 otherwise. */
+  sides?: number;
+  /**
+   * Footprint size at the top for a tapered mass (diameter for round, width for
+   * a block). 0 = same as the base.
+   */
+  topWidthIn?: number;
+  /** Repeated arched bays for an `arch-block` mass. */
+  bayCount?: number;
+  bayWidthIn?: number;
+  bayHeightIn?: number;
+  bayShape?: OpeningShape;
+  /**
+   * Drawn cross-section for `swept` (revolved around the mass centre) and
+   * `extruded` (pushed along the mass width) masses, bottom point first.
+   */
+  profile?: ProfilePoint[];
+  /** Parent mass this one sits on, so a tower cap follows its shaft. */
+  parentId?: string;
   materialNote: string;
   notes: string;
 }
+
 
 export type FeatureType =
   | "crenellation"
