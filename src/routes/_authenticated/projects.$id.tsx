@@ -360,9 +360,12 @@ function PlanViewer() {
           <Button variant="ghost" size="sm" onClick={removeProject}>
             <Trash2 className="size-4" />
           </Button>
+        </div>
       </div>
 
       {photoPanel}
+
+
 
 
 
