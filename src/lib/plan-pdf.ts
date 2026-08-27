@@ -78,8 +78,8 @@ function drawElevation(
   const oy = y + (boxH - dh) / 2;
   const label = `${face} elevation`;
 
-  const center = (m: (typeof masses)[number]) => (horizontal ? m.xIn : m.zIn);
-  const span = (m: (typeof masses)[number]) =>
+  const center = (m: PlanMass) => (horizontal ? m.xIn : m.zIn);
+  const span = (m: PlanMass) =>
     m.kind === "cylinder" ? m.diameterIn : horizontal ? m.widthIn : m.depthIn;
   const sx = (inches: number) => {
     const from = horizontal ? bounds.minX : bounds.minZ;
@@ -96,9 +96,10 @@ function drawElevation(
 
   doc.setDrawColor(...INK);
   doc.setLineWidth(1);
-  for (const m of [...masses].sort(
-    (a, b) => b.heightIn + b.top.riseIn - (a.heightIn + a.top.riseIn),
-  )) {
+  const ordered = [...masses].sort(
+    (a: PlanMass, b: PlanMass) => b.heightIn + b.top.riseIn - (a.heightIn + a.top.riseIn),
+  );
+  for (const m of ordered) {
     const s = span(m);
     const xa = Math.min(sx(center(m) - s / 2), sx(center(m) + s / 2));
     const xb = Math.max(sx(center(m) - s / 2), sx(center(m) + s / 2));
@@ -137,13 +138,13 @@ function drawElevation(
   }
 
   const mainMass = masses.reduce(
-    (a, b) => (b.widthIn * b.heightIn > a.widthIn * a.heightIn ? b : a),
+    (a: PlanMass, b: PlanMass) => (b.widthIn * b.heightIn > a.widthIn * a.heightIn ? b : a),
     masses[0]!,
   );
   doc.setDrawColor(...INK);
   doc.setLineWidth(0.6);
   for (const o of expandOpenings(model.openings.filter((op) => op.face === face))) {
-    const mass = masses.find((m) => m.id === o.massId) ?? mainMass;
+    const mass = masses.find((m: PlanMass) => m.id === o.massId) ?? mainMass;
     const leftIn = center(mass) - span(mass) / 2 + o.xIn;
     const ow = (o.widthIn / d) * px;
     const oh = (o.heightIn / d) * px;
