@@ -14,7 +14,148 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      plans: {
+        Row: {
+          ai_notes: string
+          created_at: string
+          id: string
+          model: Json
+          project_id: string
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          ai_notes?: string
+          created_at?: string
+          id?: string
+          model: Json
+          project_id: string
+          updated_at?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          ai_notes?: string
+          created_at?: string
+          id?: string
+          model?: Json
+          project_id?: string
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plans_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      project_images: {
+        Row: {
+          created_at: string
+          id: string
+          project_id: string
+          sort_order: number
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          project_id: string
+          sort_order?: number
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          project_id?: string
+          sort_order?: number
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_images_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          created_at: string
+          id: string
+          material: string
+          reference_note: string
+          scale_denominator: number
+          scale_mode: string
+          status: string
+          stock_thickness_in: number
+          subject_notes: string
+          target_height_in: number | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          material?: string
+          reference_note?: string
+          scale_denominator?: number
+          scale_mode?: string
+          status?: string
+          stock_thickness_in?: number
+          subject_notes?: string
+          target_height_in?: number | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          material?: string
+          reference_note?: string
+          scale_denominator?: number
+          scale_mode?: string
+          status?: string
+          stock_thickness_in?: number
+          subject_notes?: string
+          target_height_in?: number | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
