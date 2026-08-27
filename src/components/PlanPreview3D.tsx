@@ -4,21 +4,114 @@ import { Canvas } from "@react-three/fiber";
 
 import { OrbitControls, Environment, Lightformer, ContactShadows } from "@react-three/drei";
 import {
+  ensureMasses,
+  expandOpenings,
+  massBounds,
   resolveDenominator,
   type FaceKey,
+  type PlanFeature,
+  type PlanMass,
   type PlanModel,
   type PlanOpening,
   type ScaleSettings,
 } from "@/lib/plan-model";
 
 const WOOD = "#d9bf94";
-const WOOD_DARK = "#b9975f";
+const WOOD_DARK = "#c2a473";
 const ROOF = "#8a6a4a";
 const GLASS = "#3f5b78";
 const DOOR = "#7a4a35";
 const BASE = "#a98a5c";
+const TRIM = "#cbb28a";
 
-/** Triangular gable end, centred on x, rising from y=0 to the ridge. */
+interface Props {
+  model: PlanModel;
+  scale: ScaleSettings;
+  /** Material thickness in model inches, used for panel thickness. */
+  thicknessIn: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* Shape helpers                                                       */
+/* ------------------------------------------------------------------ */
+
+/** Outline of an opening, drawn in panel coordinates (x right, y up). */
+function openingPath(o: PlanOpening, x: number, y: number, w: number, h: number) {
+  const p = new THREE.Path();
+  const shape = o.shape ?? "rectangle";
+  const rise = Math.min(Math.max(o.archRiseIn ?? 0, 0) * (h / Math.max(o.heightIn, 0.001)), h * 0.9);
+  const cx = x + w / 2;
+
+  if (shape === "circle") {
+    p.absellipse(cx, y + h / 2, w / 2, h / 2, 0, Math.PI * 2, false, 0);
+    return p;
+  }
+  if (shape === "rectangle" || rise <= 0.0001) {
+    p.moveTo(x, y);
+    p.lineTo(x + w, y);
+    p.lineTo(x + w, y + h);
+    p.lineTo(x, y + h);
+    p.closePath();
+    return p;
+  }
+
+  const springing = y + h - rise;
+  if (shape === "pointed-arch") {
+    p.moveTo(x, y);
+    p.lineTo(x + w, y);
+    p.lineTo(x + w, springing);
+    p.quadraticCurveTo(x + w * 0.75, springing + rise * 0.75, cx, y + h);
+    p.quadraticCurveTo(x + w * 0.25, springing + rise * 0.75, x, springing);
+    p.closePath();
+    return p;
+  }
+  if (shape === "horseshoe-arch") {
+    // Horseshoe: the arch is more than a half circle, so it bulges wider than
+    // the jambs before it returns to them.
+    const bulge = w * 0.09;
+    p.moveTo(x, y);
+    p.lineTo(x + w, y);
+    p.lineTo(x + w, springing * 0.999);
+    p.bezierCurveTo(
+      x + w + bulge,
+      springing + rise * 0.35,
+      x + w * 0.72,
+      y + h,
+      cx,
+      y + h,
+    );
+    p.bezierCurveTo(
+      x + w * 0.28,
+      y + h,
+      x - bulge,
+      springing + rise * 0.35,
+      x,
+      springing * 0.999,
+    );
+    p.closePath();
+    return p;
+  }
+  // round arch
+  p.moveTo(x, y);
+  p.lineTo(x + w, y);
+  p.lineTo(x + w, springing);
+  p.absarc(cx, springing, w / 2, 0, Math.PI, false);
+  p.closePath();
+  return p;
+}
+
+/** Flat wall panel of the given face size, with its openings cut out. */
+function wallShape(w: number, h: number, holes: THREE.Path[]) {
+  const s = new THREE.Shape();
+  s.moveTo(-w / 2, 0);
+  s.lineTo(w / 2, 0);
+  s.lineTo(w / 2, h);
+  s.lineTo(-w / 2, h);
+  s.closePath();
+  s.holes = holes;
+  return s;
+}
+
 function gableShape(width: number, rise: number) {
   const s = new THREE.Shape();
   s.moveTo(-width / 2, 0);
@@ -28,207 +121,531 @@ function gableShape(width: number, rise: number) {
   return s;
 }
 
+/* ------------------------------------------------------------------ */
+/* Openings                                                            */
+/* ------------------------------------------------------------------ */
 
-interface Props {
-  model: PlanModel;
-  scale: ScaleSettings;
-  /** Material thickness in model inches, used for panel thickness. */
-  thicknessIn: number;
-}
-
-interface Dims {
-  w: number;
-  d: number;
-  h: number;
-  wall: number;
-  t: number;
-}
-
-function Opening({
+/** The glazing/door leaf and casing that sits inside a cut opening. */
+function OpeningInfill({
   o,
-  dims,
-  denominator,
+  w,
+  h,
+  t,
 }: {
   o: PlanOpening;
-  dims: Dims;
-  denominator: number;
+  w: number;
+  h: number;
+  t: number;
 }) {
-  const w = o.widthIn / denominator;
-  const h = o.heightIn / denominator;
-  const x = o.xIn / denominator;
-  const y = o.yIn / denominator;
-  const face: FaceKey = o.face;
-  const color = o.kind === "door" ? DOOR : GLASS;
-  const inset = dims.t * 0.4;
-  const depth = dims.t * 0.5;
-
-  // Position on the correct wall, measured from that face's left edge looking at it.
-  let position: [number, number, number];
-  let rotationY = 0;
-  const cy = y + h / 2;
-
-  if (face === "front") {
-    position = [-dims.w / 2 + x + w / 2, cy, dims.d / 2 - inset];
-  } else if (face === "back") {
-    position = [dims.w / 2 - x - w / 2, cy, -dims.d / 2 + inset];
-    rotationY = Math.PI;
-  } else if (face === "left") {
-    position = [-dims.w / 2 + inset, cy, -dims.d / 2 + x + w / 2];
-    rotationY = -Math.PI / 2;
-  } else {
-    position = [dims.w / 2 - inset, cy, dims.d / 2 - x - w / 2];
-    rotationY = Math.PI / 2;
-  }
-
   const cols = Math.max(1, o.paneCols ?? 1);
   const rows = Math.max(1, o.paneRows ?? 1);
-  const mullion = Math.min(w, h) * 0.045;
+  const mullion = Math.min(w, h) * 0.05;
+  const color = o.kind === "door" ? DOOR : GLASS;
+  const arched = (o.shape ?? "rectangle") !== "rectangle";
 
   return (
-    <group position={position} rotation-y={rotationY}>
-      <mesh castShadow>
-        <boxGeometry args={[w, h, depth]} />
-        <meshStandardMaterial color={color} roughness={0.35} metalness={0.05} />
+    <group>
+      {/* leaf / glazing set back inside the opening */}
+      <mesh position={[0, 0, -t * 0.35]}>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial
+          color={color}
+          roughness={o.kind === "door" ? 0.6 : 0.15}
+          metalness={o.kind === "door" ? 0 : 0.25}
+          side={THREE.DoubleSide}
+        />
       </mesh>
-      {/* casing / trim */}
-      <mesh position={[0, 0, depth * 0.5]}>
-        <boxGeometry args={[w + mullion * 3, h + mullion * 3, depth * 0.4]} />
-        <meshStandardMaterial color={WOOD_DARK} roughness={0.8} />
-      </mesh>
-      <mesh position={[0, 0, depth * 0.62]}>
-        <boxGeometry args={[w, h, depth * 0.42]} />
-        <meshStandardMaterial color={color} roughness={0.3} />
-      </mesh>
-      {o.kind === "window" &&
-        Array.from({ length: cols - 1 }, (_, i) => (
-          <mesh key={`c${i}`} position={[-w / 2 + (w * (i + 1)) / cols, 0, depth * 0.85]}>
-            <boxGeometry args={[mullion, h, depth * 0.3]} />
-            <meshStandardMaterial color={WOOD} roughness={0.8} />
-          </mesh>
-        ))}
-      {o.kind === "window" &&
-        Array.from({ length: rows - 1 }, (_, i) => (
-          <mesh key={`r${i}`} position={[0, -h / 2 + (h * (i + 1)) / rows, depth * 0.85]}>
-            <boxGeometry args={[w, mullion, depth * 0.3]} />
-            <meshStandardMaterial color={WOOD} roughness={0.8} />
-          </mesh>
-        ))}
+      {o.kind === "window" && !arched && (
+        <>
+          {Array.from({ length: cols - 1 }, (_, i) => (
+            <mesh key={`c${i}`} position={[-w / 2 + (w * (i + 1)) / cols, 0, -t * 0.2]}>
+              <boxGeometry args={[mullion, h, t * 0.25]} />
+              <meshStandardMaterial color={TRIM} roughness={0.8} />
+            </mesh>
+          ))}
+          {Array.from({ length: rows - 1 }, (_, i) => (
+            <mesh key={`r${i}`} position={[0, -h / 2 + (h * (i + 1)) / rows, -t * 0.2]}>
+              <boxGeometry args={[w, mullion, t * 0.25]} />
+              <meshStandardMaterial color={TRIM} roughness={0.8} />
+            </mesh>
+          ))}
+        </>
+      )}
     </group>
   );
 }
 
-function House({ model, scale, thicknessIn }: Props) {
-  const d = resolveDenominator(model, scale);
-  const dims: Dims = useMemo(() => {
-    const w = model.overall.widthIn / d;
-    const dep = model.overall.depthIn / d;
-    const h = model.overall.heightIn / d;
-    const wall = Math.min(model.overall.wallHeightIn / d, h);
-    return { w, d: dep, h, wall, t: Math.max(thicknessIn, 0.05) };
-  }, [model, d, thicknessIn]);
+/* ------------------------------------------------------------------ */
+/* Masses                                                              */
+/* ------------------------------------------------------------------ */
 
-  const roofRise = Math.max(dims.h - dims.wall, 0);
-  const gabled = roofRise > dims.h * 0.04;
-  const overhang = Math.max(model.roof.overhangIn / d, 0);
-  const floors = Math.max(1, Math.min(model.stories, 5)) - 1;
+interface MassProps {
+  mass: PlanMass;
+  openings: PlanOpening[];
+  features: PlanFeature[];
+  /** Scale divisor: real-world inches -> model inches. */
+  d: number;
+  t: number;
+  /** Footprint centre of the whole subject, in real-world inches. */
+  originX: number;
+  originZ: number;
+}
 
-  // Roof slope runs from the ridge down to the eave, then overhangs past it.
-  const runToEave = Math.sqrt((dims.d / 2) ** 2 + roofRise ** 2);
-  const slopeAngle = Math.atan2(roofRise, dims.d / 2);
-  const slopeLen = runToEave + overhang;
-  const halfZ = (slopeLen / 2) * (dims.d / 2 / Math.max(runToEave, 0.001));
-  const halfY = (slopeLen / 2) * (roofRise / Math.max(runToEave, 0.001));
+/** Square teeth around the top of a mass. */
+function Crenellation({ mass, d, t }: { mass: PlanMass; d: number; t: number }) {
+  const teeth = useMemo(() => {
+    const tooth = Math.max((mass.top.merlonWidthIn || 8) / d, t);
+    const gap = Math.max((mass.top.merlonGapIn || 6) / d, t);
+    const th = Math.max((mass.top.merlonHeightIn || mass.top.riseIn || 10) / d, t);
+    const out: Array<{ pos: [number, number, number]; size: [number, number, number] }> = [];
 
+    if (mass.kind === "cylinder") {
+      const r = mass.diameterIn / d / 2;
+      const pitch = tooth + gap;
+      const count = Math.max(4, Math.round((Math.PI * 2 * r) / pitch));
+      for (let i = 0; i < count; i++) {
+        const a = (i / count) * Math.PI * 2;
+        out.push({
+          pos: [Math.cos(a) * (r - t / 2), th / 2, Math.sin(a) * (r - t / 2)],
+          size: [tooth, th, t],
+        });
+      }
+      return { out, rotate: true, th };
+    }
+
+    const w = mass.widthIn / d;
+    const dp = mass.depthIn / d;
+    const run = (length: number) => {
+      const pitch = tooth + gap;
+      const count = Math.max(2, Math.floor(length / pitch));
+      const start = -length / 2 + (length - (count * pitch - gap)) / 2 + tooth / 2;
+      return Array.from({ length: count }, (_, i) => start + i * pitch);
+    };
+    for (const x of run(w)) {
+      out.push({ pos: [x, th / 2, dp / 2 - t / 2], size: [tooth, th, t] });
+      out.push({ pos: [x, th / 2, -dp / 2 + t / 2], size: [tooth, th, t] });
+    }
+    for (const z of run(dp)) {
+      out.push({ pos: [w / 2 - t / 2, th / 2, z], size: [t, th, tooth] });
+      out.push({ pos: [-w / 2 + t / 2, th / 2, z], size: [t, th, tooth] });
+    }
+    return { out, rotate: false, th };
+  }, [mass, d, t]);
 
   return (
-    <group position={[0, -dims.h / 2, 0]}>
-      {/* base plate */}
-      <mesh position={[0, -dims.t / 2, 0]} receiveShadow castShadow>
-        <boxGeometry args={[dims.w + dims.t * 2, dims.t, dims.d + dims.t * 2]} />
-        <meshStandardMaterial color={BASE} roughness={0.85} />
-      </mesh>
-
-      {/* four walls, built as panels of the real stock thickness */}
-      <mesh position={[0, dims.wall / 2, dims.d / 2 - dims.t / 2]} castShadow receiveShadow>
-        <boxGeometry args={[dims.w, dims.wall, dims.t]} />
-        <meshStandardMaterial color={WOOD} roughness={0.75} />
-      </mesh>
-      <mesh position={[0, dims.wall / 2, -dims.d / 2 + dims.t / 2]} castShadow receiveShadow>
-        <boxGeometry args={[dims.w, dims.wall, dims.t]} />
-        <meshStandardMaterial color={WOOD} roughness={0.75} />
-      </mesh>
-      <mesh position={[-dims.w / 2 + dims.t / 2, dims.wall / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[dims.t, dims.wall, dims.d - dims.t * 2]} />
-        <meshStandardMaterial color={WOOD_DARK} roughness={0.75} />
-      </mesh>
-      <mesh position={[dims.w / 2 - dims.t / 2, dims.wall / 2, 0]} castShadow receiveShadow>
-        <boxGeometry args={[dims.t, dims.wall, dims.d - dims.t * 2]} />
-        <meshStandardMaterial color={WOOD_DARK} roughness={0.75} />
-      </mesh>
-
-      {/* intermediate floors */}
-      {Array.from({ length: floors }, (_, i) => (
+    <group>
+      {teeth.out.map((m, i) => (
         <mesh
           key={i}
-          position={[0, (dims.wall * (i + 1)) / (floors + 1), 0]}
+          position={m.pos}
+          rotation-y={
+            teeth.rotate ? -Math.atan2(m.pos[2], m.pos[0]) + Math.PI / 2 : 0
+          }
           castShadow
         >
-          <boxGeometry args={[dims.w - dims.t * 2, dims.t, dims.d - dims.t * 2]} />
-          <meshStandardMaterial color={BASE} roughness={0.85} />
+          <boxGeometry args={m.size} />
+          <meshStandardMaterial color={WOOD_DARK} roughness={0.85} />
         </mesh>
       ))}
+    </group>
+  );
+}
 
-      {/* gable end panels — the ridge runs left-to-right, so the triangles
-          close off the two side walls */}
-      {gabled &&
-        [dims.w / 2 - dims.t / 2, -dims.w / 2 + dims.t / 2].map((x, i) => (
-          <mesh
-            key={i}
-            position={[x, dims.wall, 0]}
-            rotation-y={Math.PI / 2}
-            castShadow
-          >
-            <extrudeGeometry
-              args={[gableShape(dims.d, roofRise), { depth: dims.t, bevelEnabled: false }]}
-            />
-            <meshStandardMaterial color={WOOD_DARK} roughness={0.75} />
-          </mesh>
-        ))}
+function BlockMass({ mass, openings, d, t, originX, originZ }: MassProps) {
+  const w = mass.widthIn / d;
+  const dp = mass.depthIn / d;
+  const h = mass.heightIn / d;
+  const rise = Math.max(mass.top.riseIn / d, 0);
+  const top = mass.top.type;
+  const gabled = top === "gable" && rise > 0.01;
+  const shed = top === "shed" && rise > 0.01;
+  const hipped = top === "hip" && rise > 0.01;
+  const overhang = Math.max(mass.top.overhangIn / d, 0);
+  const ridgeX = mass.top.ridgeAxis === "x";
 
+  /** Openings grouped per face, as extrude holes. */
+  const faces: Array<{
+    face: FaceKey;
+    width: number;
+    position: [number, number, number];
+    rotationY: number;
+    color: string;
+  }> = [
+    { face: "front", width: w, position: [0, 0, dp / 2 - t / 2], rotationY: 0, color: WOOD },
+    { face: "back", width: w, position: [0, 0, -dp / 2 + t / 2], rotationY: Math.PI, color: WOOD },
+    { face: "left", width: dp, position: [-w / 2 + t / 2, 0, 0], rotationY: -Math.PI / 2, color: WOOD_DARK },
+    { face: "right", width: dp, position: [w / 2 - t / 2, 0, 0], rotationY: Math.PI / 2, color: WOOD_DARK },
+  ];
 
+  const runToEave = ridgeX ? dp / 2 : w / 2;
+  const slopeAngle = Math.atan2(rise, runToEave);
+  const slopeLen = Math.sqrt(runToEave ** 2 + rise ** 2) + overhang;
+  const halfRun = (slopeLen / 2) * Math.cos(slopeAngle);
+  const halfRise = (slopeLen / 2) * Math.sin(slopeAngle);
 
-      {/* roof */}
-      {gabled ? (
-        <>
-          <mesh
-            position={[0, dims.wall + roofRise - halfY, halfZ]}
-            rotation-x={slopeAngle}
-            castShadow
-          >
-            <boxGeometry args={[dims.w + overhang * 2, dims.t, slopeLen]} />
-            <meshStandardMaterial color={ROOF} roughness={0.9} />
-          </mesh>
-          <mesh
-            position={[0, dims.wall + roofRise - halfY, -halfZ]}
-            rotation-x={-slopeAngle}
+  return (
+    <group position={[mass.xIn / d - originX / d, mass.baseYIn / d, mass.zIn / d - originZ / d]} rotation-y={(mass.rotationDeg * Math.PI) / 180}>
+      {faces.map((f) => {
+        const faceOpenings = expandOpenings(openings.filter((o) => o.face === f.face));
+        const holes = faceOpenings.map((o) =>
+          openingPath(
+            o,
+            -f.width / 2 + o.xIn / d,
+            o.yIn / d,
+            o.widthIn / d,
+            Math.min(o.heightIn / d, h - o.yIn / d),
+          ),
+        );
+        return (
+          <group key={f.face} position={f.position} rotation-y={f.rotationY}>
+            <mesh castShadow receiveShadow position={[0, 0, -t / 2]}>
+              <extrudeGeometry args={[wallShape(f.width, h, holes), { depth: t, bevelEnabled: false }]} />
+              <meshStandardMaterial color={f.color} roughness={0.8} side={THREE.DoubleSide} />
+            </mesh>
+            {faceOpenings.map((o, i) => (
+              <group
+                key={i}
+                position={[
+                  -f.width / 2 + o.xIn / d + o.widthIn / d / 2,
+                  o.yIn / d + Math.min(o.heightIn / d, h - o.yIn / d) / 2,
+                  0,
+                ]}
+              >
+                <OpeningInfill
+                  o={o}
+                  w={o.widthIn / d}
+                  h={Math.min(o.heightIn / d, h - o.yIn / d)}
+                  t={t}
+                />
+              </group>
+            ))}
+          </group>
+        );
+      })}
 
-            castShadow
-          >
-            <boxGeometry args={[dims.w + overhang * 2, dims.t, slopeLen]} />
-            <meshStandardMaterial color={ROOF} roughness={0.9} />
-          </mesh>
-        </>
-      ) : (
-        <mesh position={[0, dims.wall + dims.t / 2, 0]} castShadow>
-          <boxGeometry args={[dims.w + overhang * 2, dims.t, dims.d + overhang * 2]} />
+      {/* top treatment */}
+      {(top === "flat" || top === "parapet") && (
+        <mesh position={[0, h + t / 2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[w + overhang * 2, t, dp + overhang * 2]} />
           <meshStandardMaterial color={ROOF} roughness={0.9} />
         </mesh>
       )}
+      {top === "parapet" && <group position={[0, h + t, 0]}><Crenellation mass={{ ...mass, top: { ...mass.top, merlonWidthIn: mass.widthIn, merlonGapIn: 0, merlonHeightIn: mass.top.riseIn } }} d={d} t={t} /></group>}
+      {top === "crenellated" && (
+        <>
+          <mesh position={[0, h + t / 2, 0]} receiveShadow>
+            <boxGeometry args={[w, t, dp]} />
+            <meshStandardMaterial color={BASE} roughness={0.9} />
+          </mesh>
+          <group position={[0, h + t, 0]}>
+            <Crenellation mass={mass} d={d} t={t} />
+          </group>
+        </>
+      )}
+      {gabled && (
+        <>
+          {[ridgeX ? 1 : 0].map(() => null)}
+          {[1, -1].map((sign) => (
+            <mesh
+              key={sign}
+              position={
+                ridgeX
+                  ? [0, h + rise - halfRise, sign * halfRun]
+                  : [sign * halfRun, h + rise - halfRise, 0]
+              }
+              rotation-x={ridgeX ? sign * slopeAngle : 0}
+              rotation-z={ridgeX ? 0 : -sign * slopeAngle}
+              castShadow
+            >
+              <boxGeometry
+                args={
+                  ridgeX
+                    ? [w + overhang * 2, t, slopeLen]
+                    : [slopeLen, t, dp + overhang * 2]
+                }
+              />
+              <meshStandardMaterial color={ROOF} roughness={0.9} />
+            </mesh>
+          ))}
+          {/* gable end triangles close the walls under the ridge */}
+          {[1, -1].map((sign) => (
+            <mesh
+              key={`g${sign}`}
+              position={
+                ridgeX
+                  ? [sign * (w / 2 - t / 2), h, 0]
+                  : [0, h, sign * (dp / 2 - t / 2)]
+              }
+              rotation-y={ridgeX ? Math.PI / 2 : 0}
+              castShadow
+            >
+              <extrudeGeometry
+                args={[gableShape(ridgeX ? dp : w, rise), { depth: t, bevelEnabled: false }]}
+              />
+              <meshStandardMaterial color={WOOD_DARK} roughness={0.8} />
+            </mesh>
+          ))}
+        </>
+      )}
+      {shed && (
+        <mesh
+          position={[0, h + rise / 2, 0]}
+          rotation-x={ridgeX ? slopeAngle / 1 : 0}
+          rotation-z={ridgeX ? 0 : slopeAngle}
+          castShadow
+        >
+          <boxGeometry args={[w + overhang * 2, t, dp + overhang * 2]} />
+          <meshStandardMaterial color={ROOF} roughness={0.9} />
+        </mesh>
+      )}
+      {hipped && (
+        <mesh position={[0, h + rise / 2, 0]} castShadow>
+          <coneGeometry args={[Math.max(w, dp) * 0.62, rise, 4, 1]} />
+          <meshStandardMaterial color={ROOF} roughness={0.9} />
+        </mesh>
+      )}
+      {top === "dome" && (
+        <mesh position={[0, h, 0]} castShadow>
+          <sphereGeometry args={[Math.min(w, dp) / 2, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color={ROOF} roughness={0.6} />
+        </mesh>
+      )}
+      {top === "cone" && (
+        <mesh position={[0, h + rise / 2, 0]} castShadow>
+          <coneGeometry args={[Math.min(w, dp) / 2, rise, 24]} />
+          <meshStandardMaterial color={ROOF} roughness={0.8} />
+        </mesh>
+      )}
+    </group>
+  );
+}
 
-      {/* windows & doors */}
-      {model.openings.map((o, i) => (
-        <Opening key={i} o={o} dims={dims} denominator={d} />
-      ))}
+function CylinderMass({ mass, openings, d, t, originX, originZ }: MassProps) {
+  const r = mass.diameterIn / d / 2;
+  const h = mass.heightIn / d;
+  const rise = Math.max(mass.top.riseIn / d, 0);
+  const top = mass.top.type;
+  const list = expandOpenings(openings);
+
+  return (
+    <group position={[mass.xIn / d - originX / d, mass.baseYIn / d, mass.zIn / d - originZ / d]}>
+      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[r, r, h, 40, 1, true]} />
+        <meshStandardMaterial color={WOOD} roughness={0.85} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0, t / 2, 0]} receiveShadow>
+        <cylinderGeometry args={[r, r, t, 40]} />
+        <meshStandardMaterial color={BASE} roughness={0.9} />
+      </mesh>
+
+      {/* openings sit on the tower face, placed by angle */}
+      {list.map((o, i) => {
+        const a = ((o.angleDeg ?? 0) * Math.PI) / 180;
+        const ow = Math.min(o.widthIn / d, r * 1.2);
+        const oh = Math.min(o.heightIn / d, h - o.yIn / d);
+        return (
+          <group
+            key={i}
+            position={[Math.sin(a) * (r - t * 0.3), o.yIn / d + oh / 2, Math.cos(a) * (r - t * 0.3)]}
+            rotation-y={a}
+          >
+            <mesh>
+              <planeGeometry args={[ow, oh]} />
+              <meshStandardMaterial
+                color={o.kind === "door" ? DOOR : GLASS}
+                roughness={0.25}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          </group>
+        );
+      })}
+
+      {top === "crenellated" && (
+        <>
+          <mesh position={[0, h + t / 2, 0]} receiveShadow>
+            <cylinderGeometry args={[r + t, r + t, t, 40]} />
+            <meshStandardMaterial color={BASE} roughness={0.9} />
+          </mesh>
+          <group position={[0, h + t, 0]}>
+            <Crenellation mass={mass} d={d} t={t} />
+          </group>
+        </>
+      )}
+      {top === "cone" && (
+        <mesh position={[0, h + Math.max(rise, r) / 2, 0]} castShadow>
+          <coneGeometry args={[r + t, Math.max(rise, r), 28]} />
+          <meshStandardMaterial color={ROOF} roughness={0.8} />
+        </mesh>
+      )}
+      {top === "dome" && (
+        <mesh position={[0, h, 0]} castShadow>
+          <sphereGeometry args={[r, 28, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color={ROOF} roughness={0.6} />
+        </mesh>
+      )}
+      {(top === "flat" || top === "parapet" || top === "hip" || top === "gable" || top === "shed") && (
+        <mesh position={[0, h + t / 2, 0]} castShadow>
+          <cylinderGeometry args={[r + t * 0.5, r + t * 0.5, t, 40]} />
+          <meshStandardMaterial color={ROOF} roughness={0.9} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+/** Courses, cornices, buttresses and other banded features. */
+function Features({
+  features,
+  masses,
+  d,
+  t,
+  originX,
+  originZ,
+}: {
+  features: PlanFeature[];
+  masses: PlanMass[];
+  d: number;
+  t: number;
+  originX: number;
+  originZ: number;
+}) {
+  return (
+    <>
+      {features.map((f) => {
+        const mass = masses.find((m) => m.id === f.massId) ?? masses[0];
+        if (!mass || f.type === "crenellation") return null;
+        const w = mass.kind === "cylinder" ? mass.diameterIn / d : mass.widthIn / d;
+        const dp = mass.kind === "cylinder" ? mass.diameterIn / d : mass.depthIn / d;
+        const y = f.yIn / d;
+        const proj = Math.max(f.projectionIn / d, t * 0.4);
+        const hgt = Math.max(f.heightIn / d, t * 0.6);
+        const cx = mass.xIn / d - originX / d;
+        const cz = mass.zIn / d - originZ / d;
+
+        if (f.type === "string-course" || f.type === "banding" || f.type === "cornice") {
+          return (
+            <group key={f.id} position={[cx, y + mass.baseYIn / d, cz]}>
+              {mass.kind === "cylinder" ? (
+                <mesh castShadow>
+                  <cylinderGeometry args={[w / 2 + proj, w / 2 + proj, hgt, 40, 1, true]} />
+                  <meshStandardMaterial color={TRIM} roughness={0.8} side={THREE.DoubleSide} />
+                </mesh>
+              ) : (
+                <mesh castShadow>
+                  <boxGeometry args={[w + proj * 2, hgt, dp + proj * 2]} />
+                  <meshStandardMaterial color={TRIM} roughness={0.8} />
+                </mesh>
+              )}
+            </group>
+          );
+        }
+
+        if (f.type === "steps") {
+          const count = Math.max(2, Math.min(f.count, 12));
+          const treadDepth = Math.max(proj / count, t * 0.5);
+          return (
+            <group key={f.id} position={[cx, mass.baseYIn / d, cz + dp / 2]}>
+              {Array.from({ length: count }, (_, i) => (
+                <mesh
+                  key={i}
+                  position={[0, (hgt / count) * (i + 0.5), treadDepth * (count - i - 0.5)]}
+                  castShadow
+                >
+                  <boxGeometry args={[Math.max(f.widthIn / d, w * 0.3), hgt / count, treadDepth]} />
+                  <meshStandardMaterial color={BASE} roughness={0.9} />
+                </mesh>
+              ))}
+            </group>
+          );
+        }
+
+        if (f.type === "buttress" || f.type === "column") {
+          const count = Math.max(1, Math.min(f.count, 20));
+          const pitch = f.spacingIn > 0 ? f.spacingIn / d : w / (count + 1);
+          const startX = -((count - 1) * pitch) / 2;
+          return (
+            <group key={f.id} position={[cx, mass.baseYIn / d, cz]}>
+              {Array.from({ length: count }, (_, i) => (
+                <mesh
+                  key={i}
+                  position={[startX + i * pitch, hgt / 2 + y, dp / 2 + proj / 2]}
+                  castShadow
+                >
+                  <boxGeometry args={[Math.max(f.widthIn / d, t * 2), hgt, proj]} />
+                  <meshStandardMaterial color={WOOD_DARK} roughness={0.85} />
+                </mesh>
+              ))}
+            </group>
+          );
+        }
+
+        if (f.type === "chimney") {
+          return (
+            <mesh
+              key={f.id}
+              position={[cx + f.xIn / d, mass.baseYIn / d + y + hgt / 2, cz]}
+              castShadow
+            >
+              <boxGeometry args={[Math.max(f.widthIn / d, t * 3), hgt, Math.max(proj, t * 3)]} />
+              <meshStandardMaterial color={WOOD_DARK} roughness={0.9} />
+            </mesh>
+          );
+        }
+
+        return null;
+      })}
+    </>
+  );
+}
+
+function Subject({ model, scale, thicknessIn }: Props) {
+  const d = resolveDenominator(model, scale);
+  const masses = useMemo(() => ensureMasses(model), [model]);
+  const bounds = useMemo(() => massBounds(masses), [masses]);
+  const t = Math.max(thicknessIn, 0.04);
+  const originX = (bounds.minX + bounds.maxX) / 2;
+  const originZ = (bounds.minZ + bounds.maxZ) / 2;
+  const height = bounds.maxY / d;
+  const footW = bounds.widthIn / d;
+  const footD = bounds.depthIn / d;
+
+  return (
+    <group position={[0, -height / 2, 0]}>
+      {/* base plate under everything */}
+      <mesh position={[0, -t / 2, 0]} receiveShadow>
+        <boxGeometry args={[footW + t * 4, t, footD + t * 4]} />
+        <meshStandardMaterial color={BASE} roughness={0.9} />
+      </mesh>
+
+      {masses.map((m) => {
+        const openings = model.openings.filter((o) =>
+          o.massId ? o.massId === m.id : m === masses.reduce((a, b) => (b.widthIn * b.heightIn > a.widthIn * a.heightIn ? b : a), masses[0]!),
+        );
+        const props: MassProps = {
+          mass: m,
+          openings,
+          features: model.features.filter((f) => f.massId === m.id),
+          d,
+          t,
+          originX,
+          originZ,
+        };
+        return m.kind === "cylinder" ? (
+          <CylinderMass key={m.id} {...props} />
+        ) : (
+          <BlockMass key={m.id} {...props} />
+        );
+      })}
+
+      <Features
+        features={model.features}
+        masses={masses}
+        d={d}
+        t={t}
+        originX={originX}
+        originZ={originZ}
+      />
     </group>
   );
 }
@@ -239,12 +656,8 @@ export function PlanPreview3D({ model, scale, thicknessIn }: Props) {
   useEffect(() => setMounted(true), []);
 
   const d = resolveDenominator(model, scale);
-  const span = Math.max(
-    model.overall.widthIn / d,
-    model.overall.depthIn / d,
-    model.overall.heightIn / d,
-    1,
-  );
+  const bounds = massBounds(ensureMasses(model));
+  const span = Math.max(bounds.widthIn / d, bounds.depthIn / d, bounds.maxY / d, 1);
 
   if (!mounted) {
     return (
@@ -258,7 +671,7 @@ export function PlanPreview3D({ model, scale, thicknessIn }: Props) {
     <div className="h-[460px] overflow-hidden rounded-md border border-border bg-card">
       <Canvas shadows dpr={[1, 2]} camera={{ position: [span * 1.05, span * 0.8, span * 1.35], fov: 42 }}>
         <color attach="background" args={["#f2ece0"]} />
-        <ambientLight intensity={0.55} />
+        <ambientLight intensity={0.6} />
         <directionalLight
           position={[span * 2, span * 3, span * 2]}
           intensity={1.7}
@@ -277,7 +690,7 @@ export function PlanPreview3D({ model, scale, thicknessIn }: Props) {
               scale={[span * 4, span, 1]}
             />
           </Environment>
-          <House model={model} scale={scale} thicknessIn={thicknessIn} />
+          <Subject model={model} scale={scale} thicknessIn={thicknessIn} />
           <ContactShadows
             position={[0, -span * 0.5 - 0.01, 0]}
             opacity={0.35}
@@ -288,8 +701,8 @@ export function PlanPreview3D({ model, scale, thicknessIn }: Props) {
         </Suspense>
         <OrbitControls
           enablePan={false}
-          minDistance={span * 0.9}
-          maxDistance={span * 5}
+          minDistance={span * 0.8}
+          maxDistance={span * 6}
           maxPolarAngle={Math.PI / 2.05}
           autoRotate
           autoRotateSpeed={0.7}

@@ -2,7 +2,11 @@ import { jsPDF } from "jspdf";
 import { nestParts } from "@/components/PanelLayout";
 import {
   buildCutList,
-  faceDimensions,
+  ensureMasses,
+  expandOpenings,
+  massBounds,
+  type PlanMass,
+
   formatFeetInches,
   formatInches,
   modelOverall,
@@ -61,59 +65,112 @@ function drawElevation(
   boxH: number,
 ) {
   const d = resolveDenominator(model, scale);
-  const f = faceDimensions(model)[face];
-  const w = f.widthIn / d;
-  const h = f.heightIn / d;
-  const wallH = Math.min(model.overall.wallHeightIn / d, h);
-  const gable = h - wallH > 0.02;
-  const px = Math.min(boxW / w, boxH / h);
+  const masses = ensureMasses(model);
+  const bounds = massBounds(masses);
+  const horizontal = face === "front" || face === "back";
+  const flip = face === "back" || face === "right";
+  const w = (horizontal ? bounds.widthIn : bounds.depthIn) / d;
+  const h = bounds.maxY / d;
+  const px = Math.min(boxW / Math.max(w, 0.01), boxH / Math.max(h, 0.01));
   const dw = w * px;
   const dh = h * px;
   const ox = x + (boxW - dw) / 2;
   const oy = y + (boxH - dh) / 2;
+  const label = `${face} elevation`;
+
+  const center = (m: PlanMass) => (horizontal ? m.xIn : m.zIn);
+  const span = (m: PlanMass) =>
+    m.kind === "cylinder" ? m.diameterIn : horizontal ? m.widthIn : m.depthIn;
+  const sx = (inches: number) => {
+    const from = horizontal ? bounds.minX : bounds.minZ;
+    const local = inches - from;
+    const posIn = flip ? (horizontal ? bounds.widthIn : bounds.depthIn) - local : local;
+    return ox + (posIn / d) * px;
+  };
+  const sy = (inches: number) => oy + dh - (inches / d) * px;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...INK);
-  doc.text(f.label.toUpperCase(), x, y - 8);
+  doc.text(label.toUpperCase(), x, y - 8);
 
   doc.setDrawColor(...INK);
   doc.setLineWidth(1);
-  if (gable) {
-    const shoulderY = oy + (h - wallH) * px;
-    doc.lines(
-      [
-        [0, -(dh - (shoulderY - oy))],
-        [dw / 2, -(shoulderY - oy)],
-        [dw / 2, shoulderY - oy],
-        [0, dh - (shoulderY - oy)],
-        [-dw, 0],
-      ],
-      ox,
-      oy + dh,
-      [1, 1],
-      "S",
-      true,
-    );
-    doc.setDrawColor(...BLUE);
-    doc.setLineDashPattern([3, 2], 0);
-    doc.line(ox, shoulderY, ox + dw, shoulderY);
-    doc.setLineDashPattern([], 0);
-  } else {
-    doc.rect(ox, oy, dw, dh, "S");
+  const ordered = [...masses].sort(
+    (a: PlanMass, b: PlanMass) => b.heightIn + b.top.riseIn - (a.heightIn + a.top.riseIn),
+  );
+  for (const m of ordered) {
+    const s = span(m);
+    const xa = Math.min(sx(center(m) - s / 2), sx(center(m) + s / 2));
+    const xb = Math.max(sx(center(m) - s / 2), sx(center(m) + s / 2));
+    const wallTop = sy(m.baseYIn + m.heightIn);
+    const bottom = sy(m.baseYIn);
+    doc.rect(xa, wallTop, xb - xa, bottom - wallTop, "S");
+    const risePx = (m.top.riseIn / d) * px;
+    const top = m.top.type;
+    if ((top === "gable" || top === "hip" || top === "cone" || top === "dome") && risePx > 1) {
+      doc.lines(
+        [
+          [(xb - xa) / 2, -risePx],
+          [(xb - xa) / 2, risePx],
+        ],
+        xa,
+        wallTop,
+        [1, 1],
+        "S",
+        false,
+      );
+    } else if (top === "shed" && risePx > 1) {
+      doc.lines([[xb - xa, risePx]], xa, wallTop - risePx, [1, 1], "S", false);
+    } else if (top === "crenellated" || top === "parapet") {
+      const th = Math.max(((m.top.merlonHeightIn || m.top.riseIn || 10) / d) * px, 3);
+      if (top === "parapet") {
+        doc.rect(xa, wallTop - th, xb - xa, th, "S");
+      } else {
+        const tooth = Math.max(((m.top.merlonWidthIn || 8) / d) * px, 2.5);
+        const gap = Math.max(((m.top.merlonGapIn || 6) / d) * px, 2);
+        const pitch = tooth + gap;
+        const count = Math.max(2, Math.floor((xb - xa) / pitch));
+        const start = xa + ((xb - xa) - (count * pitch - gap)) / 2;
+        for (let i = 0; i < count; i++) doc.rect(start + i * pitch, wallTop - th, tooth, th, "S");
+      }
+    }
   }
 
-  const flip = face === "back" || face === "right";
+  const mainMass = masses.reduce(
+    (a: PlanMass, b: PlanMass) => (b.widthIn * b.heightIn > a.widthIn * a.heightIn ? b : a),
+    masses[0]!,
+  );
   doc.setDrawColor(...INK);
   doc.setLineWidth(0.6);
-  for (const o of model.openings.filter((op) => op.face === face)) {
+  for (const o of expandOpenings(model.openings.filter((op) => op.face === face))) {
+    const mass = masses.find((m: PlanMass) => m.id === o.massId) ?? mainMass;
+    const leftIn = center(mass) - span(mass) / 2 + o.xIn;
     const ow = (o.widthIn / d) * px;
     const oh = (o.heightIn / d) * px;
-    const rawX = (o.xIn / d) * px;
-    const opx = flip ? ox + dw - rawX - ow : ox + rawX;
-    const opy = oy + dh - (o.yIn / d) * px - oh;
+    const raw = sx(leftIn);
+    const opx = flip ? raw - ow : raw;
+    const opy = sy(mass.baseYIn + o.yIn + o.heightIn);
     doc.rect(opx, opy, ow, oh, "S");
-    if (o.kind === "window") {
+    if ((o.shape ?? "rectangle") !== "rectangle") {
+      // Mark the arch head so the builder cuts a curve, not a square top.
+      const rise = Math.min(((o.archRiseIn ?? 0) / d) * px, oh * 0.9);
+      if (rise > 1) {
+        doc.setDrawColor(...BLUE);
+        doc.lines(
+          [
+            [ow / 2, -rise],
+            [ow / 2, rise],
+          ],
+          opx,
+          opy + rise,
+          [1, 1],
+          "S",
+          false,
+        );
+        doc.setDrawColor(...INK);
+      }
+    } else if (o.kind === "window") {
       const cols = Math.max(1, o.paneCols ?? 1);
       const rws = Math.max(1, o.paneRows ?? 1);
       doc.setDrawColor(...BLUE);
@@ -123,7 +180,6 @@ function drawElevation(
         doc.line(opx, opy + (oh * rr) / rws, opx + ow, opy + (oh * rr) / rws);
       doc.setDrawColor(...INK);
     }
-
   }
 
   doc.setDrawColor(...ORANGE);
@@ -141,6 +197,7 @@ function drawElevation(
   doc.line(ox - 16, oy + dh, ox - 8, oy + dh);
   doc.text(formatInches(h), ox - 18, oy + dh / 2, { align: "right" });
 }
+
 
 export interface PdfOptions {
   projectTitle: string;
@@ -262,9 +319,33 @@ export function buildPlanPdf(
     );
     y += 24;
   }
+  const massSummary = ensureMasses(model).map((m) => {
+    const foot =
+      m.kind === "cylinder"
+        ? `round, ${formatInches(m.diameterIn / o.denominator)} across`
+        : `${formatInches(m.widthIn / o.denominator)} × ${formatInches(m.depthIn / o.denominator)}`;
+    const top =
+      m.top.riseIn > 0
+        ? `${m.top.type} top rising ${formatInches(m.top.riseIn / o.denominator)}`
+        : `${m.top.type} top`;
+    return `${m.name}: ${foot}, walls ${formatInches(m.heightIn / o.denominator)} high, ${top}.`;
+  });
+  y = bulletSection("The model is built from these volumes", massSummary, y);
+  y = bulletSection(
+    "Architectural features",
+    model.features.map(
+      (f) =>
+        `${f.name} (${f.type.replace("-", " ")}${f.count > 1 ? ` ×${f.count}` : ""})${
+          f.description ? `: ${f.description}` : ""
+        }`,
+    ),
+    y,
+  );
+  y = bulletSection("Where this model simplifies the real subject", model.knownDifferences, y);
   y = bulletSection("Tools you need", model.toolsNeeded, y);
   y = bulletSection("Supplies", [...model.suppliesNeeded, ...model.extraMaterials], y);
   y = bulletSection("Safety", model.safetyNotes, y);
+
   footer(doc, page);
 
   /* ---------- Cut list ---------- */
@@ -408,7 +489,7 @@ export function buildPlanPdf(
       12,
     ) + 14;
     const d = resolveDenominator(model, scale);
-    for (const o of model.openings) {
+    for (const o of expandOpenings(model.openings)) {
       if (y > H - 90) {
         footer(doc, page);
         doc.addPage();
@@ -419,13 +500,21 @@ export function buildPlanPdf(
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9.5);
       doc.setTextColor(...INK);
-      doc.text(`${o.label || o.kind} — ${o.face} face`, MARGIN, y);
+      doc.text(
+        `${o.label || o.kind} — ${o.face} face${
+          o.shape && o.shape !== "rectangle" ? ` · ${o.shape.replace("-", " ")}` : ""
+        }`,
+        MARGIN,
+        y,
+      );
       y += 13;
       doc.setFont("courier", "normal");
       doc.setFontSize(8.5);
       doc.setTextColor(...BLUE);
       doc.text(
-        `${formatInches(o.widthIn / d)} × ${formatInches(o.heightIn / d)}  ·  ${formatInches(o.xIn / d)} from left  ·  ${formatInches(o.yIn / d)} up from bottom  ·  ${o.paneCols ?? 1}×${o.paneRows ?? 1} panes`,
+        `${formatInches(o.widthIn / d)} × ${formatInches(o.heightIn / d)}  ·  ${formatInches(o.xIn / d)} from left  ·  ${formatInches(o.yIn / d)} up from bottom${
+          o.archRiseIn ? `  ·  arch rise ${formatInches(o.archRiseIn / d)}` : ""
+        }  ·  ${o.paneCols ?? 1}×${o.paneRows ?? 1} panes`,
         MARGIN,
         y,
       );

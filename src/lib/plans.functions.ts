@@ -1,9 +1,24 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { PLAN_SYSTEM_PROMPT, planJsonSchema, buildUserPrompt } from "./plan-prompt";
+import {
+  PLAN_SYSTEM_PROMPT,
+  READ_SYSTEM_PROMPT,
+  REVIEW_SYSTEM_PROMPT,
+  buildReadPrompt,
+  buildUserPrompt,
+  planJsonSchema,
+  reviewJsonSchema,
+  summarizeGeometry,
+} from "./plan-prompt";
+import { normalizePlanModel } from "./plan-model";
+import { callGateway, parseJson, type ContentBlock } from "./plan-gateway";
 
-const Input = z.object({ projectId: z.string().uuid() });
+const Input = z.object({
+  projectId: z.string().uuid(),
+  /** Extra corrections from the user or a previous review, fed into the measure pass. */
+  refineNotes: z.string().max(4000).optional(),
+});
 
 export const generatePlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -46,7 +61,7 @@ export const generatePlan = createServerFn({ method: "POST" })
     if (!imageUrls.length) throw new Error("Could not read the uploaded photos.");
 
     // Label each photo so the model can cross-reference the views it is combining.
-    const photoBlocks = imageUrls.flatMap((url, i) => [
+    const photoBlocks: ContentBlock[] = imageUrls.flatMap((url, i) => [
       {
         type: "text" as const,
         text: `Reference photo ${i + 1} of ${imageUrls.length} (same subject, different view):`,
@@ -54,14 +69,23 @@ export const generatePlan = createServerFn({ method: "POST" })
       { type: "image_url" as const, image_url: { url } },
     ]);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Lovable-API-Key": key,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3.1-pro-preview",
+    /* ---- Pass 1: read the structure (massing, tops, opening shapes) ---- */
+    const structureNotes = await callGateway(key, {
+      messages: [
+        { role: "system", content: READ_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: buildReadPrompt(imageUrls.length) },
+            ...photoBlocks,
+          ],
+        },
+      ],
+    });
+
+    /* ---- Pass 2: measure and write the plan against that reading ---- */
+    const measure = async (refineNotes?: string) => {
+      const content = await callGateway(key, {
         messages: [
           { role: "system", content: PLAN_SYSTEM_PROMPT },
           {
@@ -73,46 +97,68 @@ export const generatePlan = createServerFn({ method: "POST" })
                   subjectNotes: project.subject_notes ?? "",
                   referenceNote: project.reference_note ?? "",
                   photoCount: imageUrls.length,
+                  structureNotes,
+                  ...(refineNotes ? { refineNotes } : {}),
+
                 }),
               },
               ...photoBlocks,
             ],
           },
         ],
-
         response_format: {
           type: "json_schema",
           json_schema: { name: "woodworking_plan", strict: true, schema: planJsonSchema },
         },
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      if (response.status === 402) {
-        throw new Error("This workspace is out of AI credits. Add credits to keep generating plans.");
-      }
-      if (response.status === 429) {
-        throw new Error("The AI service is busy right now. Try again in a moment.");
-      }
-      console.error("AI gateway error", response.status, body);
-      throw new Error(`Plan generation failed (${response.status}). ${body.slice(0, 200)}`);
-    }
-
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
+      });
+      return normalizePlanModel(parseJson(content));
     };
-    const content = payload.choices?.[0]?.message?.content;
-    if (!content) throw new Error("The AI returned an empty plan. Try again.");
 
-    let model: unknown;
+    let model = await measure(data.refineNotes);
+
+    /* ---- Pass 3: review the geometry against the photos, then redraft once ---- */
+    let review: { verdict?: string; corrections?: string[]; knownDifferences?: string[] } = {};
     try {
-      model = JSON.parse(content);
-    } catch {
-      const match = content.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error("The AI returned an unreadable plan. Try again.");
-      model = JSON.parse(match[0]);
+      const reviewContent = await callGateway(key, {
+        messages: [
+          { role: "system", content: REVIEW_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Plan geometry to review:\n${summarizeGeometry(model)}`,
+              },
+              ...photoBlocks,
+            ],
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "plan_review", strict: true, schema: reviewJsonSchema },
+        },
+      });
+      review = parseJson(reviewContent) as typeof review;
+    } catch (e) {
+      console.error("Plan review pass failed", e);
     }
+
+    const corrections = (review.corrections ?? []).filter(Boolean);
+    if (review.verdict === "needs-work" && corrections.length) {
+      try {
+        model = await measure(
+          [data.refineNotes, corrections.map((c) => `- ${c}`).join("\n")]
+            .filter(Boolean)
+            .join("\n"),
+        );
+      } catch (e) {
+        console.error("Corrective redraft failed, keeping first draft", e);
+      }
+    }
+
+    model.structureNotes = structureNotes;
+    const disclosed = new Set([...model.knownDifferences, ...(review.knownDifferences ?? [])]);
+    model.knownDifferences = [...disclosed].filter(Boolean);
 
     const { data: existing } = await supabase
       .from("plans")
@@ -129,7 +175,7 @@ export const generatePlan = createServerFn({ method: "POST" })
         user_id: userId,
         version,
         model: model as never,
-        ai_notes: "",
+        ai_notes: structureNotes.slice(0, 4000),
       })
       .select("id, model, version")
       .single();

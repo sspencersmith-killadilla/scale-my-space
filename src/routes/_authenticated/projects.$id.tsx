@@ -27,6 +27,7 @@ import {
   SCALE_PRESETS,
   THICKNESS_OPTIONS,
   buildCutList,
+  ensureMasses,
   formatFeetInches,
   formatInches,
   modelOverall,
@@ -127,6 +128,8 @@ function PlanViewer() {
     () => (model && scale ? modelOverall(model, scale) : null),
     [model, scale],
   );
+  const masses = useMemo(() => (model ? ensureMasses(model) : []), [model]);
+  const denominator = overall?.denominator ?? 1;
 
   async function persistScale(next: ScaleSettings) {
     setScale(next);
@@ -521,6 +524,8 @@ function PlanViewer() {
         <TabsList className="flex-wrap">
           <TabsTrigger value="cutlist">Cut list</TabsTrigger>
           <TabsTrigger value="preview3d">3D preview</TabsTrigger>
+          <TabsTrigger value="structure">Structure</TabsTrigger>
+
 
           <TabsTrigger value="drawings">Elevations</TabsTrigger>
           <TabsTrigger value="layout">Cutting layout</TabsTrigger>
@@ -586,6 +591,115 @@ function PlanViewer() {
             sit exactly where the plans place them.
           </p>
         </TabsContent>
+
+        <TabsContent value="structure" className="space-y-8 pt-6">
+          {model.structureNotes && (
+            <section className="rounded-lg border-2 border-foreground bg-card p-5">
+              <p className="tech-label text-blueprint">What the photos show</p>
+              <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
+                {model.structureNotes}
+              </p>
+            </section>
+          )}
+
+          {masses.length > 0 && (
+            <section>
+              <p className="tech-label text-blueprint">
+                Massing — {masses.length} volume{masses.length === 1 ? "" : "s"}
+              </p>
+              <div className="mt-3 overflow-x-auto rounded-lg border-2 border-foreground">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="bg-secondary">
+                    <tr>
+                      {["Volume", "Shape", "Footprint", "Wall height", "Top", "Notes"].map((h) => (
+                        <th key={h} className="tech-label border-b border-border px-4 py-3 text-left">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="font-mono">
+                    {masses.map((m) => (
+                      <tr key={m.id} className="border-b border-border align-top last:border-0">
+                        <td className="px-4 py-3 font-sans font-medium">{m.name}</td>
+                        <td className="px-4 py-3">{m.kind}</td>
+                        <td className="px-4 py-3">
+                          {m.kind === "cylinder"
+                            ? `⌀ ${formatInches(m.diameterIn / denominator)}`
+                            : `${formatInches(m.widthIn / denominator)} × ${formatInches(
+                                m.depthIn / denominator,
+                              )}`}
+                        </td>
+                        <td className="px-4 py-3">{formatInches(m.heightIn / denominator)}</td>
+                        <td className="px-4 py-3">
+                          {m.top.type}
+                          {m.top.riseIn > 0
+                            ? ` +${formatInches(m.top.riseIn / denominator)}`
+                            : ""}
+                        </td>
+                        <td className="px-4 py-3 font-sans text-xs text-muted-foreground">
+                          {[m.materialNote, m.notes, m.top.notes].filter(Boolean).join(" ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Sizes shown are finished model inches at the current scale. Build each volume
+                separately, then join them as the step-by-step instructions describe.
+              </p>
+            </section>
+          )}
+
+          {model.features.length > 0 && (
+            <section className="space-y-4">
+              <p className="tech-label text-blueprint">Architectural features</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                {model.features.map((f) => (
+                  <div key={f.id} className="rounded-lg border-2 border-foreground bg-card p-5">
+                    <p className="font-medium">{f.name}</p>
+                    <p className="tech-label mt-1 text-muted-foreground">
+                      {f.type.replace("-", " ")}
+                      {f.count > 1 ? ` · ${f.count} of them` : ""}
+                    </p>
+                    {f.description && (
+                      <p className="mt-2 text-sm text-muted-foreground">{f.description}</p>
+                    )}
+                    {(f.widthIn > 0 || f.heightIn > 0) && (
+                      <p className="mt-2 font-mono text-xs">
+                        {formatInches(f.widthIn / denominator)} ×{" "}
+                        {formatInches(f.heightIn / denominator)}
+                        {f.projectionIn > 0
+                          ? `, standing ${formatInches(f.projectionIn / denominator)} off the wall`
+                          : ""}
+                      </p>
+                    )}
+                    {f.howToMake.length > 0 && (
+                      <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                        {f.howToMake.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {model.knownDifferences.length > 0 && (
+            <section className="rounded-lg border-2 border-dashed border-accent bg-card p-5">
+              <p className="tech-label text-accent">Where the model simplifies the real thing</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                {model.knownDifferences.map((k, i) => (
+                  <li key={i}>{k}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </TabsContent>
+
 
         <TabsContent value="drawings" className="pt-6">
 
