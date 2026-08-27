@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated")({
-  component: AuthenticatedLayout;
+  component: AuthenticatedLayout,
 });
 
 function AuthenticatedLayout() {
