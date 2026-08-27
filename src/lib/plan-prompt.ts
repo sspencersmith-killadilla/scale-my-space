@@ -13,9 +13,14 @@ lighthouse, industrial building or an object. Describe what the photographs show
 Report:
 - subject and style, and the dominant material of each surface.
 - massing: the subject broken into simple VOLUMES. Count them honestly. A fortress wall with round towers is one long
-  block plus one cylinder per tower. A church is a nave block, a chancel block and a tower. Give each volume a kind
-  ("block" or "cylinder"), its rough relative size, and where it sits relative to the whole (left/right, front/back,
-  taller/shorter). Count repeated volumes exactly (e.g. "four round towers, two flanking the gate, one at each end").
+  block plus one cylinder per tower. A church is a nave block, a chancel block and a tower. Give each volume a kind from
+  this vocabulary — block, cylinder (round), tapered (wall or plinth that narrows going up), prism (polygonal, say how many
+  sides), arch-block (wall pierced by a run of repeated arches, say how many bays), swept (revolved shape: dome, conical
+  turret cap, column, baluster, urn, finial), extruded (a moulding run: cornice, string course, sill, ridge cap) — its
+  rough relative size, and where it sits relative to the whole (left/right, front/back, taller/shorter). Say which volumes
+  sit ON another volume (a cap on a tower). Count repeated volumes exactly (e.g. "four round towers, two flanking the
+  gate, one at each end").
+
 - wall tops: for each volume say whether the top is flat, gabled, hipped, shed, domed, conical, crenellated
   (battlements with square teeth) or a plain parapet.
 - openings: how many, their shape (rectangle, round arch, pointed arch, horseshoe arch, circle), whether they repeat in
