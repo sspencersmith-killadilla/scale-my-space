@@ -651,3 +651,108 @@ export function summarizeGeometry(model: {
   ];
   return lines.join("\n");
 }
+
+/* ------------------------------------------------------------------ */
+/* Detail pass: refine ONE mass into faithful sub-shapes               */
+/* ------------------------------------------------------------------ */
+
+export type DetailLevel = "simple" | "standard" | "museum";
+
+/** How many masses get their own detail pass, and how much detail to ask for. */
+export const DETAIL_BUDGET: Record<
+  DetailLevel,
+  { massPasses: number; subMasses: string; note: string }
+> = {
+  simple: { massPasses: 0, subMasses: "0-2", note: "Keep it easy to cut: big shapes only." },
+  standard: {
+    massPasses: 3,
+    subMasses: "2-6",
+    note: "Add the shapes a viewer would notice from a few feet away.",
+  },
+  museum: {
+    massPasses: 6,
+    subMasses: "4-12",
+    note: "Reproduce every distinct profile, cap, arcade and moulding you can see.",
+  },
+};
+
+export const DETAIL_SYSTEM_PROMPT = `You are an architectural pattern-maker refining ONE volume of a miniature plan so it
+matches the photographs instead of being a plain box.
+
+You are given the photographs of the whole subject, the plan's current geometry, and the one mass to refine. Return only
+extra geometry for THAT mass: child sub-masses, openings and surface features.
+
+Rules:
+- All dimensions are real-world INCHES, in the same coordinate system as the plan you were given: xIn across and zIn
+  front-to-back are measured from the centre of the WHOLE subject; baseYIn is height above the ground.
+- Every sub-mass must set parentId to the mass id you are refining, and must sit inside or on that mass — never float.
+- Use the right kind for the real shape: swept for domes, turret caps, columns, balusters, urns and finials (give the
+  profile points); extruded for cornices, string courses, sills and ridge caps; arch-block for a run of arches; prism for
+  polygonal lanterns; tapered for battered or splayed sections.
+- openings you add are measured from the LEFT edge of THIS mass's face (xIn) and from this mass's base (yIn), with massId
+  set to this mass. Use repeatCount/repeatSpacingIn for arcades rather than listing every bay.
+- features are surface bands and repeats (string courses, cornices, banding, buttresses, columns, balustrades, steps).
+- Do not repeat geometry the plan already has. Do not restate the whole plan. Never invent detail you cannot see; if a
+  face is hidden, mirror the matching visible face and say so in notes.`;
+
+export function buildDetailPrompt(input: {
+  massSummary: string;
+  geometrySummary: string;
+  structureNotes: string;
+  level: DetailLevel;
+}) {
+  const budget = DETAIL_BUDGET[input.level];
+  return [
+    `Refine this mass so the finished wooden model reads like the photographs:\n${input.massSummary}`,
+    `Current plan geometry (do not duplicate any of it):\n${input.geometrySummary}`,
+    input.structureNotes.trim()
+      ? `Structural reading of the photographs:\n${input.structureNotes.trim()}`
+      : "",
+    `Detail level: ${input.level}. Return ${budget.subMasses} sub-masses. ${budget.note}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export const detailJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["masses", "openings", "features", "notes"],
+  properties: {
+    masses: planJsonSchema.properties.masses,
+    openings: planJsonSchema.properties.openings,
+    features: planJsonSchema.properties.features,
+    notes: {
+      type: "string",
+      description: "One or two sentences on what was added and anything mirrored or guessed.",
+    },
+  },
+} as const;
+
+/** One-mass description for the detail pass. */
+export function summarizeMass(m: {
+  id: string;
+  name: string;
+  kind: string;
+  widthIn: number;
+  depthIn: number;
+  diameterIn: number;
+  heightIn: number;
+  xIn: number;
+  zIn: number;
+  baseYIn: number;
+  top: { type: string; riseIn: number };
+}) {
+  const round = m.kind === "cylinder" || m.kind === "swept";
+  return [
+    `Mass id: ${m.id}`,
+    `Name: ${m.name}`,
+    `Kind: ${m.kind}`,
+    round
+      ? `Diameter: ${Math.round(m.diameterIn)} in`
+      : `Footprint: ${Math.round(m.widthIn)} x ${Math.round(m.depthIn)} in`,
+    `Wall height: ${Math.round(m.heightIn)} in, base at ${Math.round(m.baseYIn)} in`,
+    `Centred at x=${Math.round(m.xIn)}, z=${Math.round(m.zIn)}`,
+    `Top: ${m.top.type}, rise ${Math.round(m.top.riseIn)} in`,
+  ].join("\n");
+}
