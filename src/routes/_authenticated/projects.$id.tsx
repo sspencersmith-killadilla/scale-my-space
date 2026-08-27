@@ -360,8 +360,11 @@ function PlanViewer() {
           <Button variant="ghost" size="sm" onClick={removeProject}>
             <Trash2 className="size-4" />
           </Button>
-        </div>
       </div>
+
+      {photoPanel}
+
+
 
       {/* Scale controls */}
       <section className="mt-8 rounded-lg border-2 border-foreground bg-card p-6">
