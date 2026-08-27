@@ -12,59 +12,13 @@ import {
   summarizeGeometry,
 } from "./plan-prompt";
 import { normalizePlanModel } from "./plan-model";
+import { callGateway, parseJson, type ContentBlock } from "./plan-gateway";
 
 const Input = z.object({
   projectId: z.string().uuid(),
   /** Extra corrections from the user or a previous review, fed into the measure pass. */
   refineNotes: z.string().max(4000).optional(),
 });
-
-const MODEL = "google/gemini-3.1-pro-preview";
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-
-type ContentBlock =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
-
-async function callGateway(
-  key: string,
-  body: Record<string, unknown>,
-): Promise<string> {
-  const response = await fetch(GATEWAY, {
-    method: "POST",
-    headers: { "Lovable-API-Key": key, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: MODEL, ...body }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    if (response.status === 402) {
-      throw new Error("This workspace is out of AI credits. Add credits to keep generating plans.");
-    }
-    if (response.status === 429) {
-      throw new Error("The AI service is busy right now. Try again in a moment.");
-    }
-    console.error("AI gateway error", response.status, text);
-    throw new Error(`Plan generation failed (${response.status}). ${text.slice(0, 200)}`);
-  }
-
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) throw new Error("The AI returned an empty response. Try again.");
-  return content;
-}
-
-function parseJson(content: string): unknown {
-  try {
-    return JSON.parse(content);
-  } catch {
-    const match = content.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("The AI returned an unreadable plan. Try again.");
-    return JSON.parse(match[0]);
-  }
-}
 
 export const generatePlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
