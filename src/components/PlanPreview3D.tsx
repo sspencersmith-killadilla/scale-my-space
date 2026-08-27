@@ -190,7 +190,7 @@ function House({ model, scale, thicknessIn }: Props) {
         <>
           <mesh
             position={[0, dims.wall + roofRise / 2, (dims.d / 2 + overhang) / 2]}
-            rotation-x={-slopeAngle}
+            rotation-x={slopeAngle}
             castShadow
           >
             <boxGeometry args={[dims.w + overhang * 2, dims.t, slopeLen]} />
