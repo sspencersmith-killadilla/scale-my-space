@@ -2,23 +2,39 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import {
+  DETAIL_BUDGET,
+  DETAIL_SYSTEM_PROMPT,
   PLAN_SYSTEM_PROMPT,
   READ_SYSTEM_PROMPT,
   REVIEW_SYSTEM_PROMPT,
+  buildDetailPrompt,
   buildReadPrompt,
   buildUserPrompt,
+  detailJsonSchema,
   planJsonSchema,
   reviewJsonSchema,
   summarizeGeometry,
+  summarizeMass,
+  type DetailLevel,
 } from "./plan-prompt";
-import { normalizePlanModel } from "./plan-model";
+import {
+  ensureMasses,
+  massBounds,
+  massTotalHeight,
+  massWidth,
+  normalizePlanModel,
+  type PlanModel,
+} from "./plan-model";
 import { callGateway, parseJson, type ContentBlock } from "./plan-gateway";
 
 const Input = z.object({
   projectId: z.string().uuid(),
   /** Extra corrections from the user or a previous review, fed into the measure pass. */
   refineNotes: z.string().max(4000).optional(),
+  /** How much shape detail to chase. */
+  detailLevel: z.enum(["simple", "standard", "museum"]).optional(),
 });
+
 
 export const generatePlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
