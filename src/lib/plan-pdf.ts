@@ -114,11 +114,16 @@ function drawElevation(
     const opy = oy + dh - (o.yIn / d) * px - oh;
     doc.rect(opx, opy, ow, oh, "S");
     if (o.kind === "window") {
+      const cols = Math.max(1, o.paneCols ?? 1);
+      const rws = Math.max(1, o.paneRows ?? 1);
       doc.setDrawColor(...BLUE);
-      doc.line(opx + ow / 2, opy, opx + ow / 2, opy + oh);
-      doc.line(opx, opy + oh / 2, opx + ow, opy + oh / 2);
+      for (let c = 1; c < cols; c++)
+        doc.line(opx + (ow * c) / cols, opy, opx + (ow * c) / cols, opy + oh);
+      for (let rr = 1; rr < rws; rr++)
+        doc.line(opx, opy + (oh * rr) / rws, opx + ow, opy + (oh * rr) / rws);
       doc.setDrawColor(...INK);
     }
+
   }
 
   doc.setDrawColor(...ORANGE);
