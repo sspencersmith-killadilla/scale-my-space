@@ -293,12 +293,22 @@ export function emptyPlanModel(): PlanModel {
     subject: "",
     style: "",
     stories: 1,
+    overview: "",
+    difficulty: "beginner",
+    estimatedHours: 0,
     overall: { widthIn: 0, depthIn: 0, heightIn: 0, wallHeightIn: 0 },
-    roof: { type: "gable", pitchNote: "", overhangIn: 0 },
+    roof: { type: "gable", pitchNote: "", overhangIn: 0, buildNotes: "" },
     parts: [],
     openings: [],
+    detailElements: [],
+    assemblyStages: [],
     assemblySteps: [],
     finishingSteps: [],
+    paintPlan: [],
+    toolsNeeded: [],
+    suppliesNeeded: [],
+    glossary: [],
+    safetyNotes: [],
     assumptions: [],
     extraMaterials: [],
   };
@@ -313,13 +323,18 @@ export function normalizePlanModel(raw: unknown): PlanModel {
     typeof v === "number" && Number.isFinite(v) ? v : fallback;
   const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback);
   const arr = (v: unknown) => (Array.isArray(v) ? v : []);
-  const overall = (r['overall'] ?? {}) as Record<string, unknown>;
-  const roof = (r['roof'] ?? {}) as Record<string, unknown>;
+  const strs = (v: unknown) => arr(v).map((s) => String(s)).filter(Boolean);
+  const obj = (v: unknown) => (v ?? {}) as Record<string, unknown>;
+  const overall = obj(r['overall']);
+  const roof = obj(r['roof']);
 
   return {
     subject: str(r['subject'], "Photographed subject"),
     style: str(r['style']),
     stories: Math.max(1, Math.round(num(r['stories'], 1))),
+    overview: str(r['overview']),
+    difficulty: str(r['difficulty'], "beginner"),
+    estimatedHours: num(r['estimatedHours'], 0),
     overall: {
       widthIn: num(overall['widthIn'], 120),
       depthIn: num(overall['depthIn'], 96),
@@ -330,9 +345,10 @@ export function normalizePlanModel(raw: unknown): PlanModel {
       type: str(roof['type'], "gable"),
       pitchNote: str(roof['pitchNote']),
       overhangIn: num(roof['overhangIn'], 0),
+      buildNotes: str(roof['buildNotes']),
     },
     parts: arr(r['parts']).map((p, i) => {
-      const o = (p ?? {}) as Record<string, unknown>;
+      const o = obj(p);
       return {
         id: str(o['id'], `part-${i + 1}`),
         name: str(o['name'], `Part ${i + 1}`),
@@ -341,23 +357,75 @@ export function normalizePlanModel(raw: unknown): PlanModel {
         widthIn: num(o['widthIn'], 12),
         heightIn: num(o['heightIn'], 12),
         notes: str(o['notes']),
+        location: str(o['location']),
+        cutNotes: str(o['cutNotes']),
       };
     }),
     openings: arr(r['openings']).map((p) => {
-      const o = (p ?? {}) as Record<string, unknown>;
+      const o = obj(p);
       const face = str(o['face'], "front") as FaceKey;
       return {
         face: (["front", "back", "left", "right"] as string[]).includes(face) ? face : "front",
         kind: str(o['kind'], "window") === "door" ? ("door" as const) : ("window" as const),
+        label: str(o['label']),
         xIn: num(o['xIn']),
         yIn: num(o['yIn']),
         widthIn: num(o['widthIn'], 30),
         heightIn: num(o['heightIn'], 48),
+        paneCols: Math.max(1, Math.round(num(o['paneCols'], 1))),
+        paneRows: Math.max(1, Math.round(num(o['paneRows'], 1))),
+        trimNote: str(o['trimNote']),
       };
     }),
-    assemblySteps: arr(r['assemblySteps']).map((s) => String(s)),
-    finishingSteps: arr(r['finishingSteps']).map((s) => String(s)),
-    assumptions: arr(r['assumptions']).map((s) => String(s)),
-    extraMaterials: arr(r['extraMaterials']).map((s) => String(s)),
+    detailElements: arr(r['detailElements']).map((p) => {
+      const o = obj(p);
+      return {
+        name: str(o['name'], "Detail"),
+        description: str(o['description']),
+        location: str(o['location']),
+        materials: str(o['materials']),
+        howToMake: strs(o['howToMake']),
+      };
+    }),
+    assemblyStages: arr(r['assemblyStages']).map((p, i) => {
+      const o = obj(p);
+      return {
+        title: str(o['title'], `Stage ${i + 1}`),
+        goal: str(o['goal']),
+        tools: strs(o['tools']),
+        parts: strs(o['parts']),
+        steps: arr(o['steps']).map((s) => {
+          if (typeof s === "string") return { instruction: s, detail: "", tip: "" };
+          const so = obj(s);
+          return {
+            instruction: str(so['instruction']),
+            detail: str(so['detail']),
+            tip: str(so['tip']),
+          };
+        }),
+        check: str(o['check']),
+      };
+    }),
+    paintPlan: arr(r['paintPlan']).map((p) => {
+      const o = obj(p);
+      return {
+        area: str(o['area']),
+        color: str(o['color']),
+        colorMatch: str(o['colorMatch']),
+        technique: str(o['technique']),
+      };
+    }),
+    toolsNeeded: strs(r['toolsNeeded']),
+    suppliesNeeded: strs(r['suppliesNeeded']),
+    glossary: arr(r['glossary']).map((p) => {
+      const o = obj(p);
+      return { term: str(o['term']), definition: str(o['definition']) };
+    }),
+    safetyNotes: strs(r['safetyNotes']),
+    assemblySteps: strs(r['assemblySteps']),
+    finishingSteps: strs(r['finishingSteps']),
+    assumptions: strs(r['assumptions']),
+    extraMaterials: strs(r['extraMaterials']),
   };
 }
+
