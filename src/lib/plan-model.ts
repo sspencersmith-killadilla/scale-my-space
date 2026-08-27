@@ -25,6 +25,10 @@ export interface PlanPart {
   /** Real-world panel height in inches. */
   heightIn: number;
   notes?: string;
+  /** Plain-language description of where the part sits on the finished model. */
+  location?: string;
+  /** How to cut it: grain, bevels, which openings come out of it. */
+  cutNotes?: string;
 }
 
 export type FaceKey = "front" | "back" | "left" | "right";
@@ -32,27 +36,77 @@ export type FaceKey = "front" | "back" | "left" | "right";
 export interface PlanOpening {
   face: FaceKey;
   kind: "window" | "door";
+  label?: string;
   /** Real-world inches from the left edge of that face to the opening's left edge. */
   xIn: number;
   /** Real-world inches from the bottom of that face to the opening's bottom edge. */
   yIn: number;
   widthIn: number;
   heightIn: number;
+  paneCols?: number;
+  paneRows?: number;
+  trimNote?: string;
+}
+
+export interface PlanDetailElement {
+  name: string;
+  description: string;
+  location: string;
+  materials: string;
+  howToMake: string[];
+}
+
+export interface PlanStep {
+  instruction: string;
+  detail: string;
+  tip: string;
+}
+
+export interface PlanStage {
+  title: string;
+  goal: string;
+  tools: string[];
+  parts: string[];
+  steps: PlanStep[];
+  check: string;
+}
+
+export interface PlanPaintArea {
+  area: string;
+  color: string;
+  colorMatch: string;
+  technique: string;
+}
+
+export interface PlanGlossaryEntry {
+  term: string;
+  definition: string;
 }
 
 export interface PlanModel {
   subject: string;
   style: string;
   stories: number;
+  overview: string;
+  difficulty: string;
+  estimatedHours: number;
   overall: { widthIn: number; depthIn: number; heightIn: number; wallHeightIn: number };
-  roof: { type: string; pitchNote: string; overhangIn: number };
+  roof: { type: string; pitchNote: string; overhangIn: number; buildNotes: string };
   parts: PlanPart[];
   openings: PlanOpening[];
+  detailElements: PlanDetailElement[];
+  assemblyStages: PlanStage[];
   assemblySteps: string[];
   finishingSteps: string[];
+  paintPlan: PlanPaintArea[];
+  toolsNeeded: string[];
+  suppliesNeeded: string[];
+  glossary: PlanGlossaryEntry[];
+  safetyNotes: string[];
   assumptions: string[];
   extraMaterials: string[];
 }
+
 
 export type ScaleMode = "ratio" | "target";
 
