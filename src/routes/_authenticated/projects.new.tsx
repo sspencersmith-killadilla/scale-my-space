@@ -292,10 +292,33 @@ function NewProject() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Shape detail</Label>
+              <Select value={detailLevel} onValueChange={(v) => setDetailLevel(v as DetailLevel)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="simple">Simple — big shapes only, fastest to cut</SelectItem>
+                  <SelectItem value="standard">
+                    Standard — towers, arcades and caps modelled
+                  </SelectItem>
+                  <SelectItem value="museum">
+                    Museum — every profile, dome and moulding chased
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Higher detail runs extra photo passes, so generating takes longer and the cut list
+                grows.
+              </p>
+            </div>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
             You can change any of this later — the plan recomputes instantly.
           </p>
+
         </section>
 
         <Button type="submit" size="lg" disabled={busy} className="w-full">
