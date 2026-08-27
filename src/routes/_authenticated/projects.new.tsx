@@ -63,7 +63,7 @@ function NewProject() {
     if (!files) return;
     const next = Array.from(files)
       .filter((f) => f.type.startsWith("image/"))
-      .slice(0, 6 - picks.length)
+      .slice(0, 8 - picks.length)
       .map((file) => ({ file, url: URL.createObjectURL(file) }));
     setPicks((p) => [...p, ...next]);
   }
