@@ -41,12 +41,25 @@ function ProjectsList() {
           <p className="tech-label text-accent">Workbench</p>
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight">Your projects</h1>
         </div>
-        <Button asChild>
-          <Link to="/projects/new">
-            <Plus className="mr-2 size-4" /> New plan
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={walkthrough.show}>
+            <PlayCircle className="mr-2 size-4" /> Walkthrough
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/guide">
+              <BookOpen className="mr-2 size-4" /> User guide
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link to="/projects/new">
+              <Plus className="mr-2 size-4" /> New plan
+            </Link>
+          </Button>
+        </div>
       </div>
+
+      <Walkthrough open={walkthrough.open} onClose={walkthrough.close} />
+
 
       {isLoading ? (
         <p className="mt-10 tech-label text-muted-foreground">Loading…</p>
