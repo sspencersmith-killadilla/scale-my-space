@@ -150,6 +150,57 @@ function PlanViewer() {
     }
   }
 
+  async function addPhotos(files: FileList | null) {
+    if (!files || !data?.project) return;
+    const existing = data.photos.length;
+    const picks = Array.from(files)
+      .filter((f) => f.type.startsWith("image/"))
+      .slice(0, MAX_PHOTOS - existing);
+    if (!picks.length) {
+      toast.error(`You can keep up to ${MAX_PHOTOS} reference photos.`);
+      return;
+    }
+    setUploading(true);
+    try {
+      for (let i = 0; i < picks.length; i++) {
+        const file = picks[i]!;
+        const ext = file.name.split(".").pop() ?? "jpg";
+        const path = `${data.project.user_id}/${id}/${Date.now()}-${existing + i}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("project-media")
+          .upload(path, file, { contentType: file.type });
+        if (upErr) throw new Error(upErr.message);
+        const { error: rowErr } = await supabase.from("project_images").insert({
+          project_id: id,
+          user_id: data.project.user_id,
+          storage_path: path,
+          sort_order: existing + i,
+        });
+        if (rowErr) throw new Error(rowErr.message);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["project", id] });
+      toast.success(
+        picks.length === 1 ? "Photo added — redraft to use it." : `${picks.length} photos added — redraft to use them.`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not upload photo");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removePhoto(photo: { id: string; path: string }) {
+    try {
+      await supabase.from("project_images").delete().eq("id", photo.id);
+      await supabase.storage.from("project-media").remove([photo.path]);
+      await queryClient.invalidateQueries({ queryKey: ["project", id] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove photo");
+    }
+  }
+
+
+
   async function updateOverall(field: "widthIn" | "depthIn" | "heightIn", value: number) {
     if (!model) return;
     const next: PlanModel = {
