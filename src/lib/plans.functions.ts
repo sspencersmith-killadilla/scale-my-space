@@ -29,14 +29,22 @@ export const generatePlan = createServerFn({ method: "POST" })
     const paths = (images ?? []).map((i) => i.storage_path).slice(0, 4);
     if (!paths.length) throw new Error("Upload at least one photo before generating a plan.");
 
+    // Inline the photos as base64 data URLs: the model provider cannot always
+    // fetch signed storage links, and inlining removes that dependency.
     const imageUrls: string[] = [];
     for (const path of paths) {
-      const { data: signed } = await supabase.storage
-        .from("project-media")
-        .createSignedUrl(path, 60 * 30);
-      if (signed?.signedUrl) imageUrls.push(signed.signedUrl);
+      const { data: blob } = await supabase.storage.from("project-media").download(path);
+      if (!blob) continue;
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 8192) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+      }
+      const mime = blob.type && blob.type.startsWith("image/") ? blob.type : "image/jpeg";
+      imageUrls.push(`data:${mime};base64,${btoa(binary)}`);
     }
     if (!imageUrls.length) throw new Error("Could not read the uploaded photos.");
+
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
