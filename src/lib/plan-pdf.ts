@@ -489,7 +489,7 @@ export function buildPlanPdf(
       12,
     ) + 14;
     const d = resolveDenominator(model, scale);
-    for (const o of model.openings) {
+    for (const o of expandOpenings(model.openings)) {
       if (y > H - 90) {
         footer(doc, page);
         doc.addPage();
@@ -500,13 +500,21 @@ export function buildPlanPdf(
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9.5);
       doc.setTextColor(...INK);
-      doc.text(`${o.label || o.kind} — ${o.face} face`, MARGIN, y);
+      doc.text(
+        `${o.label || o.kind} — ${o.face} face${
+          o.shape && o.shape !== "rectangle" ? ` · ${o.shape.replace("-", " ")}` : ""
+        }`,
+        MARGIN,
+        y,
+      );
       y += 13;
       doc.setFont("courier", "normal");
       doc.setFontSize(8.5);
       doc.setTextColor(...BLUE);
       doc.text(
-        `${formatInches(o.widthIn / d)} × ${formatInches(o.heightIn / d)}  ·  ${formatInches(o.xIn / d)} from left  ·  ${formatInches(o.yIn / d)} up from bottom  ·  ${o.paneCols ?? 1}×${o.paneRows ?? 1} panes`,
+        `${formatInches(o.widthIn / d)} × ${formatInches(o.heightIn / d)}  ·  ${formatInches(o.xIn / d)} from left  ·  ${formatInches(o.yIn / d)} up from bottom${
+          o.archRiseIn ? `  ·  arch rise ${formatInches(o.archRiseIn / d)}` : ""
+        }  ·  ${o.paneCols ?? 1}×${o.paneRows ?? 1} panes`,
         MARGIN,
         y,
       );
