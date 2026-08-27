@@ -16,11 +16,25 @@ Rules:
   GROUND (yIn) to the bottom of the opening.
 - assemblySteps: 6-12 clear, ordered, hobbyist-friendly steps referencing part names. Assume butt joints and wood glue.
 - assumptions: honestly state what you inferred, guessed, or could not see in the photos.
-- Never invent a scale ratio or model-size numbers; the app handles all scaling.`;
+- Never invent a scale ratio or model-size numbers; the app handles all scaling.
 
-export function buildUserPrompt(input: { subjectNotes: string; referenceNote: string }) {
+Multiple reference photos:
+- Every photo shows the SAME single subject from a different angle, distance or lighting. Never treat them as different buildings.
+- Cross-reference all of them: use the clearest straight-on view for each face's proportions, corner/oblique shots to resolve depth,
+  and close-ups for trim, window divisions and materials.
+- Where photos disagree, trust the least distorted, most face-on view and note the conflict in assumptions.
+- If a face is never visible in any photo, mirror the most similar visible face and say so in assumptions.`;
+
+export function buildUserPrompt(input: {
+  subjectNotes: string;
+  referenceNote: string;
+  photoCount?: number;
+}) {
+  const count = input.photoCount ?? 1;
   const lines = [
-    "Analyze these photographs of one subject and produce the structured plan.",
+    count > 1
+      ? `Analyze all ${count} reference photographs below. They are ${count} views of ONE subject, labelled "Reference photo 1..${count}". Combine every view into a single consistent set of real-world dimensions.`
+      : "Analyze this photograph of one subject and produce the structured plan.",
   ];
   if (input.subjectNotes.trim()) lines.push(`Builder notes about the subject: ${input.subjectNotes.trim()}`);
   if (input.referenceNote.trim())
@@ -30,6 +44,7 @@ export function buildUserPrompt(input: { subjectNotes: string; referenceNote: st
   else lines.push("No reference dimension was given — calibrate from typical human-scale features and say so in assumptions.");
   return lines.join("\n");
 }
+
 
 export const planJsonSchema = {
   type: "object",
