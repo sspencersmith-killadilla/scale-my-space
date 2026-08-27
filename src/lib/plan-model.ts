@@ -577,22 +577,56 @@ function normalizeRaw(raw: unknown): PlanModel {
     },
     masses: arr(r['masses']).map((m, i) => {
       const o = obj(m);
-      const kind: MassKind = str(o['kind'], "block") === "cylinder" ? "cylinder" : "block";
+      const rawKind = str(o['kind'], "block");
+      const kind: MassKind = (
+        [
+          "block",
+          "cylinder",
+          "tapered",
+          "prism",
+          "arch-block",
+          "swept",
+          "extruded",
+        ] as string[]
+      ).includes(rawKind)
+        ? (rawKind as MassKind)
+        : "block";
       const top = obj(o['top']);
       const topType = str(top['type'], "flat") as TopTreatment;
+      const round = kind === "cylinder" || kind === "swept";
       const diameterIn = num(o['diameterIn'], num(o['widthIn'], 48));
+      const profile = arr(o['profile'])
+        .map((p) => {
+          const po = obj(p);
+          return { xIn: num(po['xIn']), yIn: num(po['yIn']) };
+        })
+        .filter((p) => Number.isFinite(p.xIn) && Number.isFinite(p.yIn));
+      const bayShape = str(o['bayShape'], "round-arch") as OpeningShape;
       return {
         id: str(o['id'], `mass-${i + 1}`),
         name: str(o['name'], `Mass ${i + 1}`),
         kind,
-        widthIn: kind === "cylinder" ? diameterIn : num(o['widthIn'], 96),
-        depthIn: kind === "cylinder" ? diameterIn : num(o['depthIn'], 96),
+        widthIn: round ? diameterIn : num(o['widthIn'], 96),
+        depthIn: round ? diameterIn : num(o['depthIn'], 96),
         diameterIn,
         heightIn: num(o['heightIn'], 96),
         xIn: num(o['xIn']),
         zIn: num(o['zIn']),
         baseYIn: num(o['baseYIn']),
         rotationDeg: num(o['rotationDeg']),
+        sides: Math.max(0, Math.round(num(o['sides']))),
+        topWidthIn: num(o['topWidthIn']),
+        bayCount: Math.max(0, Math.round(num(o['bayCount']))),
+        bayWidthIn: num(o['bayWidthIn']),
+        bayHeightIn: num(o['bayHeightIn']),
+        bayShape: (
+          ["rectangle", "round-arch", "pointed-arch", "horseshoe-arch", "circle"] as string[]
+        ).includes(bayShape)
+          ? bayShape
+          : "round-arch",
+        profile,
+        parentId: str(o['parentId']),
+
         top: {
           type: (
             [
