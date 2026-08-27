@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Download, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { Download, ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { generatePlan } from "@/lib/plans.functions";
 import { useServerFn } from "@tanstack/react-start";
