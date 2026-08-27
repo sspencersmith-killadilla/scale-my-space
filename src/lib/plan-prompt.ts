@@ -51,15 +51,29 @@ Rules:
 - All dimensions are real-world inches (not model inches, never feet, never metric). A typical 2-story house is ~240 in tall.
 - Use visible human-scale references (door ~80 in tall, story height ~108 in, standard brick course, car, step riser) to calibrate.
 - masses is the most important field: one entry per VOLUME in the structural reading, in agreement with it — same count,
-  same kinds, same arrangement. Each mass has a footprint (widthIn x depthIn for a block, diameterIn for a cylinder), a
+  same kinds, same arrangement. Each mass has a footprint (widthIn x depthIn for a block, diameterIn for a round one), a
   wall heightIn, a footprint centre (xIn across, zIn front-to-back) in inches measured from the centre of the WHOLE
   subject (negative xIn = left, negative zIn = towards the back), a baseYIn (0 unless it starts higher up), a rotationDeg,
   and a top treatment. If the reading says four round towers, emit four cylinder masses at four different xIn/zIn.
-  For a cylinder set widthIn = depthIn = diameterIn.
+  For a cylinder or swept mass set widthIn = depthIn = diameterIn.
+- Choose the mass kind that matches the real shape — do NOT flatten everything to blocks:
+  * cylinder — round tower, drum, silo, chimney stack.
+  * tapered — battered fortress wall, splayed plinth, spire base, obelisk. Set topWidthIn to the size at the top.
+  * prism — polygonal tower, octagonal lantern, bay window. Set sides.
+  * arch-block — a wall pierced by a run of repeated arched bays (arcade, cloister, loggia, viaduct). Set bayCount,
+    bayWidthIn, bayHeightIn, bayShape. Use this instead of guessing individual openings for an arcade.
+  * swept — dome, half-dome, conical turret cap, balustrade baluster, column with base and capital, urn, finial, cupola.
+    Give profile as 4-12 points, xIn = radius from the axis at height yIn, bottom first.
+  * extruded — cornice, string course cap, window sill, ridge cap, moulded band. Give profile as the cross-section
+    (xIn = projection, yIn = height) and widthIn as the length of the run.
+  Split a complicated silhouette into a parent mass plus child masses (set parentId): shaft + cap, tower + dome, wall +
+  cornice. Prefer several honest simple shapes over one wrong box. Use at least as many masses as the reading names, and
+  add masses for every distinct capped, arcaded, domed or moulded element you can see.
 - top.type is flat, gable, hip, shed, dome, cone, crenellated or parapet. riseIn is the extra height above the wall top
   (roof rise, dome/cone rise, or parapet/battlement height). For crenellated tops give merlonWidthIn (tooth width),
   merlonGapIn (gap width) and merlonHeightIn. For gable/shed give ridgeAxis ("x" = ridge runs left-to-right).
-  Set unused numeric fields to 0.
+  Set unused numeric fields to 0, unused strings to "" and unused profile arrays to [].
+
 - overall must be the bounding box of all masses: widthIn/depthIn across every mass, heightIn to the very highest point,
   wallHeightIn to the top of the main walls.
 - parts must be a COMPLETE, buildable panel breakdown covering EVERY mass and feature: wall panels per mass, tower wraps
