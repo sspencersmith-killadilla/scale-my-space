@@ -3,6 +3,9 @@ import { nestParts } from "@/components/PanelLayout";
 import {
   buildCutList,
   ensureMasses,
+  isRoundMass,
+  massWidth,
+  massDepth,
   expandOpenings,
   massBounds,
   type PlanMass,
@@ -79,8 +82,7 @@ function drawElevation(
   const label = `${face} elevation`;
 
   const center = (m: PlanMass) => (horizontal ? m.xIn : m.zIn);
-  const span = (m: PlanMass) =>
-    m.kind === "cylinder" ? m.diameterIn : horizontal ? m.widthIn : m.depthIn;
+  const span = (m: PlanMass) => (horizontal ? massWidth(m) : massDepth(m));
   const sx = (inches: number) => {
     const from = horizontal ? bounds.minX : bounds.minZ;
     const local = inches - from;
@@ -320,10 +322,11 @@ export function buildPlanPdf(
     y += 24;
   }
   const massSummary = ensureMasses(model).map((m) => {
-    const foot =
-      m.kind === "cylinder"
-        ? `round, ${formatInches(m.diameterIn / o.denominator)} across`
-        : `${formatInches(m.widthIn / o.denominator)} × ${formatInches(m.depthIn / o.denominator)}`;
+    const foot = isRoundMass(m)
+      ? `round, ${formatInches(massWidth(m) / o.denominator)} across`
+      : `${formatInches(massWidth(m) / o.denominator)} × ${formatInches(
+          massDepth(m) / o.denominator,
+        )}${m.kind === "prism" ? ` (${m.sides ?? 6}-sided)` : ""}`;
     const top =
       m.top.riseIn > 0
         ? `${m.top.type} top rising ${formatInches(m.top.riseIn / o.denominator)}`

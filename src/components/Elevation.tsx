@@ -1,5 +1,7 @@
 import {
   ensureMasses,
+  massWidth,
+  massDepth,
   expandOpenings,
   formatInches,
   massBounds,
@@ -81,8 +83,7 @@ export function Elevation({ model, scale, face, width = 420 }: Props) {
   const sy = (inches: number) => y0 + drawH - (inches / d) * px;
 
   const massCenter = (m: PlanMass) => (horizontal ? m.xIn : m.zIn);
-  const massSpan = (m: PlanMass) =>
-    m.kind === "cylinder" ? m.diameterIn : horizontal ? m.widthIn : m.depthIn;
+  const massSpan = (m: PlanMass) => (horizontal ? massWidth(m) : massDepth(m));
 
   const mainMass = masses.reduce(
     (a, b) => (b.widthIn * b.heightIn > a.widthIn * a.heightIn ? b : a),

@@ -13,9 +13,14 @@ lighthouse, industrial building or an object. Describe what the photographs show
 Report:
 - subject and style, and the dominant material of each surface.
 - massing: the subject broken into simple VOLUMES. Count them honestly. A fortress wall with round towers is one long
-  block plus one cylinder per tower. A church is a nave block, a chancel block and a tower. Give each volume a kind
-  ("block" or "cylinder"), its rough relative size, and where it sits relative to the whole (left/right, front/back,
-  taller/shorter). Count repeated volumes exactly (e.g. "four round towers, two flanking the gate, one at each end").
+  block plus one cylinder per tower. A church is a nave block, a chancel block and a tower. Give each volume a kind from
+  this vocabulary — block, cylinder (round), tapered (wall or plinth that narrows going up), prism (polygonal, say how many
+  sides), arch-block (wall pierced by a run of repeated arches, say how many bays), swept (revolved shape: dome, conical
+  turret cap, column, baluster, urn, finial), extruded (a moulding run: cornice, string course, sill, ridge cap) — its
+  rough relative size, and where it sits relative to the whole (left/right, front/back, taller/shorter). Say which volumes
+  sit ON another volume (a cap on a tower). Count repeated volumes exactly (e.g. "four round towers, two flanking the
+  gate, one at each end").
+
 - wall tops: for each volume say whether the top is flat, gabled, hipped, shed, domed, conical, crenellated
   (battlements with square teeth) or a plain parapet.
 - openings: how many, their shape (rectangle, round arch, pointed arch, horseshoe arch, circle), whether they repeat in
@@ -51,15 +56,29 @@ Rules:
 - All dimensions are real-world inches (not model inches, never feet, never metric). A typical 2-story house is ~240 in tall.
 - Use visible human-scale references (door ~80 in tall, story height ~108 in, standard brick course, car, step riser) to calibrate.
 - masses is the most important field: one entry per VOLUME in the structural reading, in agreement with it — same count,
-  same kinds, same arrangement. Each mass has a footprint (widthIn x depthIn for a block, diameterIn for a cylinder), a
+  same kinds, same arrangement. Each mass has a footprint (widthIn x depthIn for a block, diameterIn for a round one), a
   wall heightIn, a footprint centre (xIn across, zIn front-to-back) in inches measured from the centre of the WHOLE
   subject (negative xIn = left, negative zIn = towards the back), a baseYIn (0 unless it starts higher up), a rotationDeg,
   and a top treatment. If the reading says four round towers, emit four cylinder masses at four different xIn/zIn.
-  For a cylinder set widthIn = depthIn = diameterIn.
+  For a cylinder or swept mass set widthIn = depthIn = diameterIn.
+- Choose the mass kind that matches the real shape — do NOT flatten everything to blocks:
+  * cylinder — round tower, drum, silo, chimney stack.
+  * tapered — battered fortress wall, splayed plinth, spire base, obelisk. Set topWidthIn to the size at the top.
+  * prism — polygonal tower, octagonal lantern, bay window. Set sides.
+  * arch-block — a wall pierced by a run of repeated arched bays (arcade, cloister, loggia, viaduct). Set bayCount,
+    bayWidthIn, bayHeightIn, bayShape. Use this instead of guessing individual openings for an arcade.
+  * swept — dome, half-dome, conical turret cap, balustrade baluster, column with base and capital, urn, finial, cupola.
+    Give profile as 4-12 points, xIn = radius from the axis at height yIn, bottom first.
+  * extruded — cornice, string course cap, window sill, ridge cap, moulded band. Give profile as the cross-section
+    (xIn = projection, yIn = height) and widthIn as the length of the run.
+  Split a complicated silhouette into a parent mass plus child masses (set parentId): shaft + cap, tower + dome, wall +
+  cornice. Prefer several honest simple shapes over one wrong box. Use at least as many masses as the reading names, and
+  add masses for every distinct capped, arcaded, domed or moulded element you can see.
 - top.type is flat, gable, hip, shed, dome, cone, crenellated or parapet. riseIn is the extra height above the wall top
   (roof rise, dome/cone rise, or parapet/battlement height). For crenellated tops give merlonWidthIn (tooth width),
   merlonGapIn (gap width) and merlonHeightIn. For gable/shed give ridgeAxis ("x" = ridge runs left-to-right).
-  Set unused numeric fields to 0.
+  Set unused numeric fields to 0, unused strings to "" and unused profile arrays to [].
+
 - overall must be the bounding box of all masses: widthIn/depthIn across every mass, heightIn to the very highest point,
   wallHeightIn to the top of the main walls.
 - parts must be a COMPLETE, buildable panel breakdown covering EVERY mass and feature: wall panels per mass, tower wraps
@@ -241,7 +260,7 @@ export const planJsonSchema = {
     masses: {
       type: "array",
       description:
-        "Every volume of the subject. One entry per block or cylinder, matching the structural reading's count.",
+        "Every volume of the subject. One entry per shape, matching the structural reading's count.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -257,6 +276,14 @@ export const planJsonSchema = {
           "zIn",
           "baseYIn",
           "rotationDeg",
+          "sides",
+          "topWidthIn",
+          "bayCount",
+          "bayWidthIn",
+          "bayHeightIn",
+          "bayShape",
+          "profile",
+          "parentId",
           "top",
           "materialNote",
           "notes",
@@ -264,7 +291,12 @@ export const planJsonSchema = {
         properties: {
           id: { type: "string" },
           name: { type: "string" },
-          kind: { type: "string", enum: ["block", "cylinder"] },
+          kind: {
+            type: "string",
+            enum: ["block", "cylinder", "tapered", "prism", "arch-block", "swept", "extruded"],
+            description:
+              "block = rectangular volume; cylinder = round tower/drum; tapered = battered or splayed volume; prism = polygonal tower (set sides); arch-block = wall pierced by repeated arched bays (set bayCount); swept = revolved silhouette such as a dome, turret cap, column or urn (set profile); extruded = a drawn cross-section run along a length, such as a cornice, sill or ridge cap (set profile).",
+          },
           widthIn: { type: "number" },
           depthIn: { type: "number" },
           diameterIn: { type: "number", description: "0 for a block." },
@@ -273,6 +305,34 @@ export const planJsonSchema = {
           zIn: { type: "number", description: "Footprint centre front-to-back. Negative = towards the back." },
           baseYIn: { type: "number" },
           rotationDeg: { type: "number" },
+          sides: { type: "integer", description: "Faces of a prism mass (e.g. 6 or 8). 0 otherwise." },
+          topWidthIn: {
+            type: "number",
+            description: "Footprint size at the top of a tapered mass. 0 otherwise.",
+          },
+          bayCount: { type: "integer", description: "Arched bays of an arch-block mass. 0 otherwise." },
+          bayWidthIn: { type: "number", description: "Clear width of one bay. 0 otherwise." },
+          bayHeightIn: { type: "number", description: "Height of one bay. 0 otherwise." },
+          bayShape: {
+            type: "string",
+            enum: ["rectangle", "round-arch", "pointed-arch", "horseshoe-arch", "circle"],
+          },
+          profile: {
+            type: "array",
+            description:
+              "Drawn cross-section for swept and extruded masses, bottom point first. For swept, xIn is the radius from the axis at height yIn. For extruded, xIn/yIn trace the moulding cross-section. Empty array for other kinds. Use 4-12 points.",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["xIn", "yIn"],
+              properties: { xIn: { type: "number" }, yIn: { type: "number" } },
+            },
+          },
+          parentId: {
+            type: "string",
+            description: "Id of the mass this one sits on (e.g. a cap on its tower). Empty string if none.",
+          },
+
           top: {
             type: "object",
             additionalProperties: false,
@@ -590,4 +650,109 @@ export function summarizeGeometry(model: {
     ...model.features.map((f) => `- ${f.name}: ${f.type} x${f.count} on ${f.massId}.`),
   ];
   return lines.join("\n");
+}
+
+/* ------------------------------------------------------------------ */
+/* Detail pass: refine ONE mass into faithful sub-shapes               */
+/* ------------------------------------------------------------------ */
+
+export type DetailLevel = "simple" | "standard" | "museum";
+
+/** How many masses get their own detail pass, and how much detail to ask for. */
+export const DETAIL_BUDGET: Record<
+  DetailLevel,
+  { massPasses: number; subMasses: string; note: string }
+> = {
+  simple: { massPasses: 0, subMasses: "0-2", note: "Keep it easy to cut: big shapes only." },
+  standard: {
+    massPasses: 3,
+    subMasses: "2-6",
+    note: "Add the shapes a viewer would notice from a few feet away.",
+  },
+  museum: {
+    massPasses: 6,
+    subMasses: "4-12",
+    note: "Reproduce every distinct profile, cap, arcade and moulding you can see.",
+  },
+};
+
+export const DETAIL_SYSTEM_PROMPT = `You are an architectural pattern-maker refining ONE volume of a miniature plan so it
+matches the photographs instead of being a plain box.
+
+You are given the photographs of the whole subject, the plan's current geometry, and the one mass to refine. Return only
+extra geometry for THAT mass: child sub-masses, openings and surface features.
+
+Rules:
+- All dimensions are real-world INCHES, in the same coordinate system as the plan you were given: xIn across and zIn
+  front-to-back are measured from the centre of the WHOLE subject; baseYIn is height above the ground.
+- Every sub-mass must set parentId to the mass id you are refining, and must sit inside or on that mass — never float.
+- Use the right kind for the real shape: swept for domes, turret caps, columns, balusters, urns and finials (give the
+  profile points); extruded for cornices, string courses, sills and ridge caps; arch-block for a run of arches; prism for
+  polygonal lanterns; tapered for battered or splayed sections.
+- openings you add are measured from the LEFT edge of THIS mass's face (xIn) and from this mass's base (yIn), with massId
+  set to this mass. Use repeatCount/repeatSpacingIn for arcades rather than listing every bay.
+- features are surface bands and repeats (string courses, cornices, banding, buttresses, columns, balustrades, steps).
+- Do not repeat geometry the plan already has. Do not restate the whole plan. Never invent detail you cannot see; if a
+  face is hidden, mirror the matching visible face and say so in notes.`;
+
+export function buildDetailPrompt(input: {
+  massSummary: string;
+  geometrySummary: string;
+  structureNotes: string;
+  level: DetailLevel;
+}) {
+  const budget = DETAIL_BUDGET[input.level];
+  return [
+    `Refine this mass so the finished wooden model reads like the photographs:\n${input.massSummary}`,
+    `Current plan geometry (do not duplicate any of it):\n${input.geometrySummary}`,
+    input.structureNotes.trim()
+      ? `Structural reading of the photographs:\n${input.structureNotes.trim()}`
+      : "",
+    `Detail level: ${input.level}. Return ${budget.subMasses} sub-masses. ${budget.note}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export const detailJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["masses", "openings", "features", "notes"],
+  properties: {
+    masses: planJsonSchema.properties.masses,
+    openings: planJsonSchema.properties.openings,
+    features: planJsonSchema.properties.features,
+    notes: {
+      type: "string",
+      description: "One or two sentences on what was added and anything mirrored or guessed.",
+    },
+  },
+} as const;
+
+/** One-mass description for the detail pass. */
+export function summarizeMass(m: {
+  id: string;
+  name: string;
+  kind: string;
+  widthIn: number;
+  depthIn: number;
+  diameterIn: number;
+  heightIn: number;
+  xIn: number;
+  zIn: number;
+  baseYIn: number;
+  top: { type: string; riseIn: number };
+}) {
+  const round = m.kind === "cylinder" || m.kind === "swept";
+  return [
+    `Mass id: ${m.id}`,
+    `Name: ${m.name}`,
+    `Kind: ${m.kind}`,
+    round
+      ? `Diameter: ${Math.round(m.diameterIn)} in`
+      : `Footprint: ${Math.round(m.widthIn)} x ${Math.round(m.depthIn)} in`,
+    `Wall height: ${Math.round(m.heightIn)} in, base at ${Math.round(m.baseYIn)} in`,
+    `Centred at x=${Math.round(m.xIn)}, z=${Math.round(m.zIn)}`,
+    `Top: ${m.top.type}, rise ${Math.round(m.top.riseIn)} in`,
+  ].join("\n");
 }

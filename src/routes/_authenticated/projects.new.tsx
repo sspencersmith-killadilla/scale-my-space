@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { generatePlan } from "@/lib/plans.functions";
+import type { DetailLevel } from "@/lib/plan-prompt";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ function NewProject() {
   const [targetHeight, setTargetHeight] = useState("18");
   const [thickness, setThickness] = useState(0.25);
   const [material, setMaterial] = useState<string>(MATERIAL_OPTIONS[0]);
+  const [detailLevel, setDetailLevel] = useState<DetailLevel>("standard");
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
 
@@ -116,7 +118,7 @@ function NewProject() {
       }
 
       setStage("Measuring the subject with AI…");
-      await runGenerate({ data: { projectId: project.id } });
+      await runGenerate({ data: { projectId: project.id, detailLevel } });
 
       toast.success("Plan drafted.");
       navigate({ to: "/projects/$id", params: { id: project.id } });
@@ -292,10 +294,33 @@ function NewProject() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Shape detail</Label>
+              <Select value={detailLevel} onValueChange={(v) => setDetailLevel(v as DetailLevel)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="simple">Simple — big shapes only, fastest to cut</SelectItem>
+                  <SelectItem value="standard">
+                    Standard — towers, arcades and caps modelled
+                  </SelectItem>
+                  <SelectItem value="museum">
+                    Museum — every profile, dome and moulding chased
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Higher detail runs extra photo passes, so generating takes longer and the cut list
+                grows.
+              </p>
+            </div>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
             You can change any of this later — the plan recomputes instantly.
           </p>
+
         </section>
 
         <Button type="submit" size="lg" disabled={busy} className="w-full">

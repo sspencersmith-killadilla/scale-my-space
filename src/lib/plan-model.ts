@@ -35,7 +35,28 @@ export interface PlanPart {
 
 export type FaceKey = "front" | "back" | "left" | "right";
 
-export type MassKind = "block" | "cylinder";
+export type MassKind =
+  | "block"
+  | "cylinder"
+  /** Battered wall, plinth, spire base: footprint shrinks (or grows) towards the top. */
+  | "tapered"
+  /** Polygonal tower or bay, `sides` faces. */
+  | "prism"
+  /** An arcade wall: a block pierced by `bayCount` repeated arched bays. */
+  | "arch-block"
+  /** Revolved silhouette: dome, turret cap, baluster, column, urn. */
+  | "swept"
+  /** A drawn cross-section pushed along a length: cornice, moulding, sill, ridge cap. */
+  | "extruded";
+
+/** A point on a drawn profile, in real-world inches. */
+export interface ProfilePoint {
+  /** Half-width (radius) for swept shapes, or cross-section width for extrusions. */
+  xIn: number;
+  /** Height above the profile's base. */
+  yIn: number;
+}
+
 
 export type TopTreatment =
   | "flat"
@@ -83,9 +104,29 @@ export interface PlanMass {
   baseYIn: number;
   rotationDeg: number;
   top: PlanMassTop;
+  /** Number of faces for a prism mass (6 = hexagonal tower). 0 otherwise. */
+  sides?: number;
+  /**
+   * Footprint size at the top for a tapered mass (diameter for round, width for
+   * a block). 0 = same as the base.
+   */
+  topWidthIn?: number;
+  /** Repeated arched bays for an `arch-block` mass. */
+  bayCount?: number;
+  bayWidthIn?: number;
+  bayHeightIn?: number;
+  bayShape?: OpeningShape;
+  /**
+   * Drawn cross-section for `swept` (revolved around the mass centre) and
+   * `extruded` (pushed along the mass width) masses, bottom point first.
+   */
+  profile?: ProfilePoint[];
+  /** Parent mass this one sits on, so a tower cap follows its shaft. */
+  parentId?: string;
   materialNote: string;
   notes: string;
 }
+
 
 export type FeatureType =
   | "crenellation"
@@ -536,22 +577,56 @@ function normalizeRaw(raw: unknown): PlanModel {
     },
     masses: arr(r['masses']).map((m, i) => {
       const o = obj(m);
-      const kind: MassKind = str(o['kind'], "block") === "cylinder" ? "cylinder" : "block";
+      const rawKind = str(o['kind'], "block");
+      const kind: MassKind = (
+        [
+          "block",
+          "cylinder",
+          "tapered",
+          "prism",
+          "arch-block",
+          "swept",
+          "extruded",
+        ] as string[]
+      ).includes(rawKind)
+        ? (rawKind as MassKind)
+        : "block";
       const top = obj(o['top']);
       const topType = str(top['type'], "flat") as TopTreatment;
+      const round = kind === "cylinder" || kind === "swept";
       const diameterIn = num(o['diameterIn'], num(o['widthIn'], 48));
+      const profile = arr(o['profile'])
+        .map((p) => {
+          const po = obj(p);
+          return { xIn: num(po['xIn']), yIn: num(po['yIn']) };
+        })
+        .filter((p) => Number.isFinite(p.xIn) && Number.isFinite(p.yIn));
+      const bayShape = str(o['bayShape'], "round-arch") as OpeningShape;
       return {
         id: str(o['id'], `mass-${i + 1}`),
         name: str(o['name'], `Mass ${i + 1}`),
         kind,
-        widthIn: kind === "cylinder" ? diameterIn : num(o['widthIn'], 96),
-        depthIn: kind === "cylinder" ? diameterIn : num(o['depthIn'], 96),
+        widthIn: round ? diameterIn : num(o['widthIn'], 96),
+        depthIn: round ? diameterIn : num(o['depthIn'], 96),
         diameterIn,
         heightIn: num(o['heightIn'], 96),
         xIn: num(o['xIn']),
         zIn: num(o['zIn']),
         baseYIn: num(o['baseYIn']),
         rotationDeg: num(o['rotationDeg']),
+        sides: Math.max(0, Math.round(num(o['sides']))),
+        topWidthIn: num(o['topWidthIn']),
+        bayCount: Math.max(0, Math.round(num(o['bayCount']))),
+        bayWidthIn: num(o['bayWidthIn']),
+        bayHeightIn: num(o['bayHeightIn']),
+        bayShape: (
+          ["rectangle", "round-arch", "pointed-arch", "horseshoe-arch", "circle"] as string[]
+        ).includes(bayShape)
+          ? bayShape
+          : "round-arch",
+        profile,
+        parentId: str(o['parentId']),
+
         top: {
           type: (
             [
@@ -758,6 +833,38 @@ export function ensureMasses(model: PlanModel): PlanMass[] {
   ];
 }
 
+/** True when the mass has a round (revolved) footprint. */
+export function isRoundMass(m: PlanMass) {
+  return m.kind === "cylinder" || m.kind === "swept";
+}
+
+/** Widest profile radius of a swept/extruded mass, in inches. */
+export function profileMaxX(m: PlanMass) {
+  return (m.profile ?? []).reduce((a, p) => Math.max(a, Math.abs(p.xIn)), 0);
+}
+
+/** Footprint width (X) of any mass kind. */
+export function massWidth(m: PlanMass) {
+  if (m.kind === "swept") return Math.max(m.diameterIn, profileMaxX(m) * 2);
+  if (isRoundMass(m) || m.kind === "prism") return m.diameterIn || m.widthIn;
+  return m.widthIn;
+}
+
+/** Footprint depth (Z) of any mass kind. */
+export function massDepth(m: PlanMass) {
+  if (m.kind === "swept") return Math.max(m.diameterIn, profileMaxX(m) * 2);
+  if (isRoundMass(m) || m.kind === "prism") return m.diameterIn || m.depthIn;
+  if (m.kind === "extruded") return Math.max(m.depthIn, profileMaxX(m));
+  return m.depthIn;
+}
+
+/** Total height including the top treatment or drawn profile. */
+export function massTotalHeight(m: PlanMass) {
+  const profileTop = (m.profile ?? []).reduce((a, p) => Math.max(a, p.yIn), 0);
+  const own = m.kind === "swept" ? Math.max(m.heightIn, profileTop) : m.heightIn;
+  return own + Math.max(m.top.riseIn, 0);
+}
+
 /** Bounding box of all masses, in real-world inches. */
 export function massBounds(masses: PlanMass[]) {
   let minX = Infinity;
@@ -766,14 +873,15 @@ export function massBounds(masses: PlanMass[]) {
   let maxZ = -Infinity;
   let maxY = 0;
   for (const m of masses) {
-    const w = m.kind === "cylinder" ? m.diameterIn : m.widthIn;
-    const dp = m.kind === "cylinder" ? m.diameterIn : m.depthIn;
+    const w = massWidth(m);
+    const dp = massDepth(m);
     minX = Math.min(minX, m.xIn - w / 2);
     maxX = Math.max(maxX, m.xIn + w / 2);
     minZ = Math.min(minZ, m.zIn - dp / 2);
     maxZ = Math.max(maxZ, m.zIn + dp / 2);
-    maxY = Math.max(maxY, m.baseYIn + m.heightIn + Math.max(m.top.riseIn, 0));
+    maxY = Math.max(maxY, m.baseYIn + massTotalHeight(m));
   }
+
   if (!Number.isFinite(minX)) return { minX: 0, maxX: 0, minZ: 0, maxZ: 0, maxY: 0, widthIn: 0, depthIn: 0 };
   return { minX, maxX, minZ, maxZ, maxY, widthIn: maxX - minX, depthIn: maxZ - minZ };
 }
@@ -837,7 +945,84 @@ export function derivedGeometryParts(model: PlanModel): PlanPart[] {
           cutNotes: "Cut two circles of this diameter. They keep the wrapped wall round.",
           notes: "Sand the edges until the wrap sits flush.",
         });
+      } else if (m.kind === "prism") {
+        const sides = Math.max(3, m.sides ?? 6);
+        const faceWidth = (m.diameterIn || m.widthIn) * Math.sin(Math.PI / sides);
+        const bevel = 90 - 180 / sides;
+        out.push({
+          id: `${m.id}-facet`,
+          name: `${m.name} — facet panel`,
+          role: "side-wall",
+          quantity: sides,
+          widthIn: faceWidth,
+          heightIn: m.heightIn,
+          massId: m.id,
+          location: `One of the ${sides} faces of ${m.name}.`,
+          cutNotes: `Cut ${sides} identical panels. Bevel both long edges at ${bevel.toFixed(
+            1,
+          )}° so the faces close into a ${sides}-sided tower. Test-fit dry with tape before gluing.`,
+          notes: `Face width across the flats of a ${formatInches(
+            m.diameterIn || m.widthIn,
+          )} tower.`,
+        });
+        out.push({
+          id: `${m.id}-jig`,
+          name: `${m.name} — alignment ring`,
+          role: "floor",
+          quantity: 2,
+          widthIn: m.diameterIn || m.widthIn,
+          heightIn: m.diameterIn || m.widthIn,
+          massId: m.id,
+          location: `Inside ${m.name}, top and bottom.`,
+          cutNotes: `Cut two ${sides}-sided plates to this size across the corners; they hold the facets square while the glue sets.`,
+          notes: "",
+        });
+      } else if (m.kind === "swept") {
+        const dia = massWidth(m);
+        out.push({
+          id: `${m.id}-blank`,
+          name: `${m.name} — turning/stacking blank`,
+          role: "detail",
+          quantity: 1,
+          widthIn: dia,
+          heightIn: dia,
+          massId: m.id,
+          location: `Forms the shaped profile of ${m.name}.`,
+          cutNotes: `Cut squares of this size and glue them into a stack ${formatInches(
+            massTotalHeight(m),
+          )} tall, then sand or turn down to the printed profile template. If you have no lathe, cut each layer to the diameter shown on the profile page and sand the steps smooth.`,
+          notes: `Largest diameter ${formatInches(dia)}.`,
+        });
+        out.push({
+          id: `${m.id}-template`,
+          name: `${m.name} — profile template`,
+          role: "detail",
+          quantity: 1,
+          widthIn: dia / 2 + 0.5,
+          heightIn: massTotalHeight(m),
+          massId: m.id,
+          location: "Cardstock template, not part of the model.",
+          cutNotes:
+            "Trace the printed half-profile onto card, cut it out, and hold it against the blank as you sand to check the shape.",
+          notes: "",
+        });
+      } else if (m.kind === "extruded") {
+        out.push({
+          id: `${m.id}-run`,
+          name: `${m.name} — moulding run`,
+          role: "trim",
+          quantity: 1,
+          widthIn: m.widthIn,
+          heightIn: Math.max(m.heightIn, 0.5),
+          massId: m.id,
+          location: `Runs along ${m.name}.`,
+          cutNotes:
+            "Cut one long strip of this height, then shape the drawn cross-section along the whole length (sand block, scratch stock, or stacked thin strips). Mitre the corners at 45° after shaping.",
+          notes: `Total run ${formatInches(m.widthIn)}.`,
+        });
       } else {
+        const isArcade = m.kind === "arch-block" && (m.bayCount ?? 0) > 1;
+        const topW = m.kind === "tapered" && m.topWidthIn ? m.topWidthIn : m.widthIn;
         out.push({
           id: `${m.id}-front`,
           name: `${m.name} — front & back panel`,
@@ -847,7 +1032,15 @@ export function derivedGeometryParts(model: PlanModel): PlanPart[] {
           heightIn: m.heightIn,
           massId: m.id,
           location: `Front and back faces of ${m.name}.`,
-          cutNotes: "Cut square, grain running vertically. Cut this mass's openings out before assembly.",
+          cutNotes: isArcade
+            ? `Cut square, grain vertical. Mark out ${m.bayCount} identical bays ${formatInches(
+                m.bayWidthIn || 0,
+              )} wide and cut each ${m.bayShape ?? "round-arch"} opening with a coping saw or scroll saw before assembly — make one card template and reuse it for every bay so they match.`
+            : m.kind === "tapered"
+              ? `Cut as a trapezoid: ${formatInches(m.widthIn)} at the bottom, ${formatInches(
+                  topW,
+                )} at the top. Cut this mass's openings before assembly.`
+              : "Cut square, grain running vertically. Cut this mass's openings out before assembly.",
           notes: m.notes,
         });
         out.push({
@@ -859,14 +1052,19 @@ export function derivedGeometryParts(model: PlanModel): PlanPart[] {
           heightIn: m.heightIn,
           massId: m.id,
           location: `Left and right faces of ${m.name}.`,
-          cutNotes: "Cut square; these sit between the front and back panels.",
+          cutNotes:
+            m.kind === "tapered"
+              ? "Cut square, then bevel the long edges so they meet the sloped front and back."
+              : "Cut square; these sit between the front and back panels.",
           notes: m.notes,
         });
       }
     }
     if (m.top.type === "crenellated" || m.top.type === "parapet") {
-      const perimeter =
-        m.kind === "cylinder" ? Math.PI * m.diameterIn : (m.widthIn + m.depthIn) * 2;
+      const perimeter = isRoundMass(m)
+        ? Math.PI * massWidth(m)
+        : (massWidth(m) + massDepth(m)) * 2;
+
       out.push({
         id: `${m.id}-parapet`,
         name: `${m.name} — ${m.top.type === "crenellated" ? "battlement strip" : "parapet strip"}`,

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Download, ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { generatePlan } from "@/lib/plans.functions";
+import type { DetailLevel } from "@/lib/plan-prompt";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,9 @@ import {
   THICKNESS_OPTIONS,
   buildCutList,
   ensureMasses,
+  isRoundMass,
+  massWidth,
+  massDepth,
   formatFeetInches,
   formatInches,
   modelOverall,
@@ -65,6 +69,7 @@ function PlanViewer() {
   const queryClient = useQueryClient();
   const runGenerate = useServerFn(generatePlan);
   const [regenerating, setRegenerating] = useState(false);
+  const [detailLevel, setDetailLevel] = useState<DetailLevel>("standard");
   const [uploading, setUploading] = useState(false);
 
 
@@ -148,7 +153,7 @@ function PlanViewer() {
   async function regenerate() {
     setRegenerating(true);
     try {
-      await runGenerate({ data: { projectId: id } });
+      await runGenerate({ data: { projectId: id, detailLevel } });
       await queryClient.invalidateQueries({ queryKey: ["project", id] });
       toast.success("Plan redrafted from your photos.");
     } catch (err) {
@@ -350,7 +355,18 @@ function PlanViewer() {
             {model.stories === 1 ? "" : "s"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={detailLevel} onValueChange={(v) => setDetailLevel(v as DetailLevel)}>
+            <SelectTrigger className="h-9 w-[168px]" aria-label="Shape detail level">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="simple">Simple detail</SelectItem>
+              <SelectItem value="standard">Standard detail</SelectItem>
+              <SelectItem value="museum">Museum detail</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Button variant="outline" size="sm" onClick={regenerate} disabled={regenerating}>
             {regenerating ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
@@ -624,10 +640,10 @@ function PlanViewer() {
                         <td className="px-4 py-3 font-sans font-medium">{m.name}</td>
                         <td className="px-4 py-3">{m.kind}</td>
                         <td className="px-4 py-3">
-                          {m.kind === "cylinder"
-                            ? `⌀ ${formatInches(m.diameterIn / denominator)}`
-                            : `${formatInches(m.widthIn / denominator)} × ${formatInches(
-                                m.depthIn / denominator,
+                          {isRoundMass(m)
+                            ? `⌀ ${formatInches(massWidth(m) / denominator)}`
+                            : `${formatInches(massWidth(m) / denominator)} × ${formatInches(
+                                massDepth(m) / denominator,
                               )}`}
                         </td>
                         <td className="px-4 py-3">{formatInches(m.heightIn / denominator)}</td>

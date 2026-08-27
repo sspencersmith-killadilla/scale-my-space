@@ -7,6 +7,9 @@ import {
   ensureMasses,
   expandOpenings,
   massBounds,
+  massDepth,
+  massWidth,
+  isRoundMass,
   resolveDenominator,
   type FaceKey,
   type PlanFeature,
@@ -199,8 +202,8 @@ function Crenellation({ mass, d, t }: { mass: PlanMass; d: number; t: number }) 
     const th = Math.max((mass.top.merlonHeightIn || mass.top.riseIn || 10) / d, t);
     const out: Array<{ pos: [number, number, number]; size: [number, number, number] }> = [];
 
-    if (mass.kind === "cylinder") {
-      const r = mass.diameterIn / d / 2;
+    if (isRoundMass(mass) || mass.kind === "prism") {
+      const r = massWidth(mass) / d / 2;
       const pitch = tooth + gap;
       const count = Math.max(4, Math.round((Math.PI * 2 * r) / pitch));
       for (let i = 0; i < count; i++) {
@@ -213,8 +216,8 @@ function Crenellation({ mass, d, t }: { mass: PlanMass; d: number; t: number }) 
       return { out, rotate: true, th };
     }
 
-    const w = mass.widthIn / d;
-    const dp = mass.depthIn / d;
+    const w = massWidth(mass) / d;
+    const dp = massDepth(mass) / d;
     const run = (length: number) => {
       const pitch = tooth + gap;
       const count = Math.max(2, Math.floor(length / pitch));
@@ -494,6 +497,196 @@ function CylinderMass({ mass, openings, d, t, originX, originZ }: MassProps) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Richer shape kinds                                                  */
+/* ------------------------------------------------------------------ */
+
+/** Battered / splayed volume: footprint changes from base to top. */
+function TaperedMass({ mass, d, t, originX, originZ }: MassProps) {
+  const w = mass.widthIn / d;
+  const dp = mass.depthIn / d;
+  const h = mass.heightIn / d;
+  const topW = (mass.topWidthIn && mass.topWidthIn > 0 ? mass.topWidthIn : mass.widthIn) / d;
+  const ratio = w > 0 ? topW / w : 1;
+  const rise = Math.max(mass.top.riseIn / d, 0);
+  const top = mass.top.type;
+
+  return (
+    <group
+      position={[mass.xIn / d - originX / d, mass.baseYIn / d, mass.zIn / d - originZ / d]}
+      rotation-y={(mass.rotationDeg * Math.PI) / 180}
+    >
+      <mesh position={[0, h / 2, 0]} scale={[w / Math.SQRT2, 1, dp / Math.SQRT2]} castShadow receiveShadow>
+        <cylinderGeometry args={[ratio * Math.SQRT2 * 0.5, Math.SQRT2 * 0.5, h, 4, 1]} />
+        <meshStandardMaterial color={WOOD} roughness={0.85} flatShading />
+      </mesh>
+      {top === "crenellated" && (
+        <group position={[0, h, 0]}>
+          <Crenellation mass={{ ...mass, widthIn: topW * d, depthIn: dp * d * ratio }} d={d} t={t} />
+        </group>
+      )}
+      {top === "cone" && (
+        <mesh position={[0, h + Math.max(rise, topW / 2) / 2, 0]} castShadow>
+          <coneGeometry args={[topW / 2, Math.max(rise, topW / 2), 24]} />
+          <meshStandardMaterial color={ROOF} roughness={0.8} />
+        </mesh>
+      )}
+      {(top === "flat" || top === "parapet") && (
+        <mesh position={[0, h + t / 2, 0]} castShadow>
+          <boxGeometry args={[topW, t, dp * ratio]} />
+          <meshStandardMaterial color={ROOF} roughness={0.9} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+/** Polygonal tower or bay. */
+function PrismMass({ mass, d, t, originX, originZ }: MassProps) {
+  const sides = Math.max(3, Math.min(mass.sides ?? 6, 16));
+  const r = (mass.diameterIn || mass.widthIn) / d / 2;
+  const h = mass.heightIn / d;
+  const rise = Math.max(mass.top.riseIn / d, 0);
+  const top = mass.top.type;
+
+  return (
+    <group
+      position={[mass.xIn / d - originX / d, mass.baseYIn / d, mass.zIn / d - originZ / d]}
+      rotation-y={(mass.rotationDeg * Math.PI) / 180}
+    >
+      <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[r, r, h, sides, 1]} />
+        <meshStandardMaterial color={WOOD} roughness={0.85} flatShading />
+      </mesh>
+      {top === "cone" && (
+        <mesh position={[0, h + Math.max(rise, r) / 2, 0]} castShadow>
+          <coneGeometry args={[r + t, Math.max(rise, r), sides]} />
+          <meshStandardMaterial color={ROOF} roughness={0.8} flatShading />
+        </mesh>
+      )}
+      {top === "dome" && (
+        <mesh position={[0, h, 0]} castShadow>
+          <sphereGeometry args={[r, sides * 2, 14, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color={ROOF} roughness={0.6} />
+        </mesh>
+      )}
+      {top === "crenellated" && (
+        <group position={[0, h, 0]}>
+          <Crenellation mass={mass} d={d} t={t} />
+        </group>
+      )}
+      {(top === "flat" || top === "parapet" || top === "hip") && (
+        <mesh position={[0, h + t / 2, 0]} castShadow>
+          <cylinderGeometry args={[r + t * 0.5, r + t * 0.5, t, sides]} />
+          <meshStandardMaterial color={ROOF} roughness={0.9} flatShading />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+/** Revolved silhouette: dome, turret cap, baluster, urn, column. */
+function SweptMass({ mass, d, t, originX, originZ }: MassProps) {
+  const geometry = useMemo(() => {
+    const pts = (mass.profile ?? [])
+      .map((p) => new THREE.Vector2(Math.max(Math.abs(p.xIn) / d, 0.0005), p.yIn / d))
+      .sort((a, b) => a.y - b.y);
+    if (pts.length < 2) {
+      const r = Math.max(mass.diameterIn / d / 2, 0.01);
+      const h = Math.max(mass.heightIn / d, 0.01);
+      pts.push(new THREE.Vector2(r, 0), new THREE.Vector2(r, h * 0.6), new THREE.Vector2(r * 0.2, h));
+    }
+    return new THREE.LatheGeometry(pts, 40);
+  }, [mass, d]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  return (
+    <group position={[mass.xIn / d - originX / d, mass.baseYIn / d, mass.zIn / d - originZ / d]}>
+      <mesh geometry={geometry} castShadow receiveShadow>
+        <meshStandardMaterial color={WOOD} roughness={0.7} side={THREE.DoubleSide} />
+      </mesh>
+      {mass.top.type === "cone" && (
+        <mesh position={[0, mass.heightIn / d + t, 0]} castShadow>
+          <coneGeometry args={[t * 1.5, t * 4, 16]} />
+          <meshStandardMaterial color={ROOF} roughness={0.7} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+/** Drawn cross-section pushed along the mass width: cornice, sill, ridge cap. */
+function ExtrudedMass({ mass, d, originX, originZ }: MassProps) {
+  const shape = useMemo(() => {
+    const pts = mass.profile ?? [];
+    const s = new THREE.Shape();
+    if (pts.length < 3) {
+      const hh = Math.max(mass.heightIn / d, 0.02);
+      const pp = Math.max(mass.depthIn / d, 0.02);
+      s.moveTo(0, 0);
+      s.lineTo(pp, 0);
+      s.lineTo(pp * 0.5, hh);
+      s.lineTo(0, hh);
+      s.closePath();
+      return s;
+    }
+    s.moveTo(pts[0]!.xIn / d, pts[0]!.yIn / d);
+    for (const p of pts.slice(1)) s.lineTo(p.xIn / d, p.yIn / d);
+    s.closePath();
+    return s;
+  }, [mass, d]);
+
+  const length = Math.max(mass.widthIn / d, 0.02);
+
+  return (
+    <group
+      position={[mass.xIn / d - originX / d, mass.baseYIn / d, mass.zIn / d - originZ / d]}
+      rotation-y={(mass.rotationDeg * Math.PI) / 180}
+    >
+      <mesh position={[-length / 2, 0, 0]} rotation-y={Math.PI / 2} castShadow receiveShadow>
+        <extrudeGeometry args={[shape, { depth: length, bevelEnabled: false }]} />
+        <meshStandardMaterial color={TRIM} roughness={0.8} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Arcade wall: a block whose face carries repeated arched bays. */
+function ArchBlockMass(props: MassProps) {
+  const { mass, openings } = props;
+  const bays = Math.max(0, Math.round(mass.bayCount ?? 0));
+  const synthesized: PlanOpening[] = useMemo(() => {
+    if (bays < 1) return [];
+    const bw = mass.bayWidthIn && mass.bayWidthIn > 0 ? mass.bayWidthIn : mass.widthIn / (bays * 1.6);
+    const bh =
+      mass.bayHeightIn && mass.bayHeightIn > 0 ? mass.bayHeightIn : mass.heightIn * 0.6;
+    const pitch = mass.widthIn / bays;
+    return Array.from({ length: bays }, (_, i) => ({
+      face: "front" as FaceKey,
+      kind: "window" as const,
+      label: `${mass.name} bay ${i + 1}`,
+      xIn: pitch * i + (pitch - bw) / 2,
+      yIn: Math.max((mass.heightIn - bh) * 0.15, 0),
+      widthIn: bw,
+      heightIn: bh,
+      paneCols: 1,
+      paneRows: 1,
+      trimNote: "",
+      massId: mass.id,
+      shape: mass.bayShape ?? "round-arch",
+      archRiseIn: bw / 2,
+      recessIn: 0,
+      repeatCount: 1,
+      repeatSpacingIn: 0,
+      angleDeg: 0,
+    }));
+  }, [mass, bays]);
+
+  return <BlockMass {...props} openings={[...openings, ...synthesized]} />;
+}
+
+
 /** Courses, cornices, buttresses and other banded features. */
 function Features({
   features,
@@ -515,8 +708,8 @@ function Features({
       {features.map((f) => {
         const mass = masses.find((m) => m.id === f.massId) ?? masses[0];
         if (!mass || f.type === "crenellation") return null;
-        const w = mass.kind === "cylinder" ? mass.diameterIn / d : mass.widthIn / d;
-        const dp = mass.kind === "cylinder" ? mass.diameterIn / d : mass.depthIn / d;
+        const w = massWidth(mass) / d;
+        const dp = massDepth(mass) / d;
         const y = f.yIn / d;
         const proj = Math.max(f.projectionIn / d, t * 0.4);
         const hgt = Math.max(f.heightIn / d, t * 0.6);
@@ -526,7 +719,7 @@ function Features({
         if (f.type === "string-course" || f.type === "banding" || f.type === "cornice") {
           return (
             <group key={f.id} position={[cx, y + mass.baseYIn / d, cz]}>
-              {mass.kind === "cylinder" ? (
+              {isRoundMass(mass) ? (
                 <mesh castShadow>
                   <cylinderGeometry args={[w / 2 + proj, w / 2 + proj, hgt, 40, 1, true]} />
                   <meshStandardMaterial color={TRIM} roughness={0.8} side={THREE.DoubleSide} />
@@ -631,11 +824,22 @@ function Subject({ model, scale, thicknessIn }: Props) {
           originX,
           originZ,
         };
-        return m.kind === "cylinder" ? (
-          <CylinderMass key={m.id} {...props} />
-        ) : (
-          <BlockMass key={m.id} {...props} />
-        );
+        switch (m.kind) {
+          case "cylinder":
+            return <CylinderMass key={m.id} {...props} />;
+          case "tapered":
+            return <TaperedMass key={m.id} {...props} />;
+          case "prism":
+            return <PrismMass key={m.id} {...props} />;
+          case "swept":
+            return <SweptMass key={m.id} {...props} />;
+          case "extruded":
+            return <ExtrudedMass key={m.id} {...props} />;
+          case "arch-block":
+            return <ArchBlockMass key={m.id} {...props} />;
+          default:
+            return <BlockMass key={m.id} {...props} />;
+        }
       })}
 
       <Features
