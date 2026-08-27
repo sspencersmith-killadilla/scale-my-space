@@ -316,8 +316,9 @@ export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow
   const d = resolveDenominator(model, scale);
   const t = scale.stockThicknessIn;
   let sideWallSeen = 0;
+  const parts = [...model.parts, ...derivedGeometryParts(model)];
 
-  return model.parts.map((part) => {
+  return parts.map((part) => {
     let length = part.widthIn / d;
     const height = part.heightIn / d;
     const notes: string[] = [];
@@ -340,8 +341,11 @@ export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow
       sideWallSeen += 1;
     }
     const openings = face
-      ? model.openings
-          .filter((o) => o.face === face)
+      ? expandOpenings(model.openings)
+          .filter(
+            (o) =>
+              o.face === face && (!part.massId || !o.massId || o.massId === part.massId),
+          )
           .map((o) => ({
             label: o.label || `${o.kind} on ${o.face}`,
             kind: o.kind,
