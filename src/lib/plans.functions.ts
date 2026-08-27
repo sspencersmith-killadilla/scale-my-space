@@ -132,7 +132,47 @@ export const generatePlan = createServerFn({ method: "POST" })
 
     let model = await measure(data.refineNotes);
 
-    /* ---- Pass 3: refine the biggest masses into faithful sub-shapes ---- */
+    /* ---- Pass 3: review the massing against the photos, then redraft once ---- */
+    let review: { verdict?: string; corrections?: string[]; knownDifferences?: string[] } = {};
+    try {
+      const reviewContent = await callGateway(key, {
+        messages: [
+          { role: "system", content: REVIEW_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Plan geometry to review:\n${summarizeGeometry(model)}`,
+              },
+              ...photoBlocks,
+            ],
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: "plan_review", strict: true, schema: reviewJsonSchema },
+        },
+      });
+      review = parseJson(reviewContent) as typeof review;
+    } catch (e) {
+      console.error("Plan review pass failed", e);
+    }
+
+    const corrections = (review.corrections ?? []).filter(Boolean);
+    if (review.verdict === "needs-work" && corrections.length) {
+      try {
+        model = await measure(
+          [data.refineNotes, corrections.map((c) => `- ${c}`).join("\n")]
+            .filter(Boolean)
+            .join("\n"),
+        );
+      } catch (e) {
+        console.error("Corrective redraft failed, keeping first draft", e);
+      }
+    }
+
+    /* ---- Pass 4: refine the biggest masses into faithful sub-shapes ---- */
     const level: DetailLevel = data.detailLevel ?? "standard";
     const budget = DETAIL_BUDGET[level];
     const detailNotes: string[] = [];
@@ -180,6 +220,7 @@ export const generatePlan = createServerFn({ method: "POST" })
       );
 
       const maxSpan = Math.max(bounds.widthIn, bounds.depthIn, bounds.maxY, 1) * 1.2;
+      const existingIds = new Set(model.masses.map((m) => m.id));
       for (const result of details) {
         if (!result) continue;
         // Reuse the plan normalizer so sub-geometry is defaulted the same way.
@@ -187,14 +228,13 @@ export const generatePlan = createServerFn({ method: "POST" })
           ...(result.raw as Record<string, unknown>),
           overall: model.overall,
         }) as PlanModel;
-        const existingIds = new Set(model.masses.map((m) => m.id));
         const parent = result.mass;
 
         for (const m of sub.masses) {
           const w = massWidth(m);
           const h = massTotalHeight(m);
           if (w <= 0 || h <= 0 || w > maxSpan || h > maxSpan) continue;
-          let id = m.id && !existingIds.has(m.id) ? m.id : `${parent.id}-d${model.masses.length + 1}`;
+          let id = m.id || `${parent.id}-detail`;
           while (existingIds.has(id)) id = `${id}x`;
           existingIds.add(id);
           model.masses.push({ ...m, id, parentId: m.parentId || parent.id });
@@ -206,9 +246,8 @@ export const generatePlan = createServerFn({ method: "POST" })
         for (const f of sub.features) {
           model.features.push({ ...f, massId: f.massId || parent.id });
         }
-        const note = typeof (result.raw as { notes?: unknown }).notes === "string"
-          ? ((result.raw as { notes: string }).notes ?? "").trim()
-          : "";
+        const rawNote = (result.raw as { notes?: unknown }).notes;
+        const note = typeof rawNote === "string" ? rawNote.trim() : "";
         if (note) detailNotes.push(`${parent.name}: ${note}`);
       }
 
@@ -216,46 +255,6 @@ export const generatePlan = createServerFn({ method: "POST" })
       model = normalizePlanModel(model);
     }
 
-    /* ---- Pass 4: review the geometry against the photos, then redraft once ---- */
-
-    let review: { verdict?: string; corrections?: string[]; knownDifferences?: string[] } = {};
-    try {
-      const reviewContent = await callGateway(key, {
-        messages: [
-          { role: "system", content: REVIEW_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `Plan geometry to review:\n${summarizeGeometry(model)}`,
-              },
-              ...photoBlocks,
-            ],
-          },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "plan_review", strict: true, schema: reviewJsonSchema },
-        },
-      });
-      review = parseJson(reviewContent) as typeof review;
-    } catch (e) {
-      console.error("Plan review pass failed", e);
-    }
-
-    const corrections = (review.corrections ?? []).filter(Boolean);
-    if (review.verdict === "needs-work" && corrections.length) {
-      try {
-        model = await measure(
-          [data.refineNotes, corrections.map((c) => `- ${c}`).join("\n")]
-            .filter(Boolean)
-            .join("\n"),
-        );
-      } catch (e) {
-        console.error("Corrective redraft failed, keeping first draft", e);
-      }
-    }
 
     model.structureNotes = structureNotes;
     const disclosed = new Set([...model.knownDifferences, ...(review.knownDifferences ?? [])]);
