@@ -194,7 +194,7 @@ function House({ model, scale, thicknessIn }: Props) {
       {gabled ? (
         <>
           <mesh
-            position={[0, dims.wall + roofRise / 2, (dims.d / 2 + overhang) / 2]}
+            position={[0, dims.wall + roofRise - halfY, halfZ]}
             rotation-x={slopeAngle}
             castShadow
           >
