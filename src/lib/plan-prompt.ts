@@ -241,7 +241,7 @@ export const planJsonSchema = {
     masses: {
       type: "array",
       description:
-        "Every volume of the subject. One entry per block or cylinder, matching the structural reading's count.",
+        "Every volume of the subject. One entry per shape, matching the structural reading's count.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -257,6 +257,14 @@ export const planJsonSchema = {
           "zIn",
           "baseYIn",
           "rotationDeg",
+          "sides",
+          "topWidthIn",
+          "bayCount",
+          "bayWidthIn",
+          "bayHeightIn",
+          "bayShape",
+          "profile",
+          "parentId",
           "top",
           "materialNote",
           "notes",
@@ -264,7 +272,12 @@ export const planJsonSchema = {
         properties: {
           id: { type: "string" },
           name: { type: "string" },
-          kind: { type: "string", enum: ["block", "cylinder"] },
+          kind: {
+            type: "string",
+            enum: ["block", "cylinder", "tapered", "prism", "arch-block", "swept", "extruded"],
+            description:
+              "block = rectangular volume; cylinder = round tower/drum; tapered = battered or splayed volume; prism = polygonal tower (set sides); arch-block = wall pierced by repeated arched bays (set bayCount); swept = revolved silhouette such as a dome, turret cap, column or urn (set profile); extruded = a drawn cross-section run along a length, such as a cornice, sill or ridge cap (set profile).",
+          },
           widthIn: { type: "number" },
           depthIn: { type: "number" },
           diameterIn: { type: "number", description: "0 for a block." },
@@ -273,6 +286,34 @@ export const planJsonSchema = {
           zIn: { type: "number", description: "Footprint centre front-to-back. Negative = towards the back." },
           baseYIn: { type: "number" },
           rotationDeg: { type: "number" },
+          sides: { type: "integer", description: "Faces of a prism mass (e.g. 6 or 8). 0 otherwise." },
+          topWidthIn: {
+            type: "number",
+            description: "Footprint size at the top of a tapered mass. 0 otherwise.",
+          },
+          bayCount: { type: "integer", description: "Arched bays of an arch-block mass. 0 otherwise." },
+          bayWidthIn: { type: "number", description: "Clear width of one bay. 0 otherwise." },
+          bayHeightIn: { type: "number", description: "Height of one bay. 0 otherwise." },
+          bayShape: {
+            type: "string",
+            enum: ["rectangle", "round-arch", "pointed-arch", "horseshoe-arch", "circle"],
+          },
+          profile: {
+            type: "array",
+            description:
+              "Drawn cross-section for swept and extruded masses, bottom point first. For swept, xIn is the radius from the axis at height yIn. For extruded, xIn/yIn trace the moulding cross-section. Empty array for other kinds. Use 4-12 points.",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["xIn", "yIn"],
+              properties: { xIn: { type: "number" }, yIn: { type: "number" } },
+            },
+          },
+          parentId: {
+            type: "string",
+            description: "Id of the mass this one sits on (e.g. a cap on its tower). Empty string if none.",
+          },
+
           top: {
             type: "object",
             additionalProperties: false,
