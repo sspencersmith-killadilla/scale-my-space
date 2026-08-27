@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Download, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { Download, ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { generatePlan } from "@/lib/plans.functions";
 import { useServerFn } from "@tanstack/react-start";
@@ -54,6 +54,7 @@ export const Route = createFileRoute("/_authenticated/projects/$id")({
 });
 
 const FACES: FaceKey[] = ["front", "right", "back", "left"];
+const MAX_PHOTOS = 8;
 
 function PlanViewer() {
   const { id } = Route.useParams();
@@ -61,6 +62,8 @@ function PlanViewer() {
   const queryClient = useQueryClient();
   const runGenerate = useServerFn(generatePlan);
   const [regenerating, setRegenerating] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["project", id],
@@ -79,19 +82,21 @@ function PlanViewer() {
         .limit(1);
       const { data: images } = await supabase
         .from("project_images")
-        .select("storage_path")
+        .select("id, storage_path")
         .eq("project_id", id)
         .order("sort_order", { ascending: true });
-      let photoUrl: string | null = null;
-      if (images?.[0]) {
-        const { data: signed } = await supabase.storage
-          .from("project-media")
-          .createSignedUrl(images[0].storage_path, 3600);
-        photoUrl = signed?.signedUrl ?? null;
-      }
-      return { project, plan: plans?.[0] ?? null, photoUrl };
+      const photos = await Promise.all(
+        (images ?? []).map(async (img) => {
+          const { data: signed } = await supabase.storage
+            .from("project-media")
+            .createSignedUrl(img.storage_path, 3600);
+          return { id: img.id, path: img.storage_path, url: signed?.signedUrl ?? null };
+        }),
+      );
+      return { project, plan: plans?.[0] ?? null, photos };
     },
   });
+
 
   const [scale, setScale] = useState<ScaleSettings | null>(null);
   const [model, setModel] = useState<PlanModel | null>(null);
@@ -148,6 +153,57 @@ function PlanViewer() {
     }
   }
 
+  async function addPhotos(files: FileList | null) {
+    if (!files || !data?.project) return;
+    const existing = data.photos.length;
+    const picks = Array.from(files)
+      .filter((f) => f.type.startsWith("image/"))
+      .slice(0, MAX_PHOTOS - existing);
+    if (!picks.length) {
+      toast.error(`You can keep up to ${MAX_PHOTOS} reference photos.`);
+      return;
+    }
+    setUploading(true);
+    try {
+      for (let i = 0; i < picks.length; i++) {
+        const file = picks[i]!;
+        const ext = file.name.split(".").pop() ?? "jpg";
+        const path = `${data.project.user_id}/${id}/${Date.now()}-${existing + i}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("project-media")
+          .upload(path, file, { contentType: file.type });
+        if (upErr) throw new Error(upErr.message);
+        const { error: rowErr } = await supabase.from("project_images").insert({
+          project_id: id,
+          user_id: data.project.user_id,
+          storage_path: path,
+          sort_order: existing + i,
+        });
+        if (rowErr) throw new Error(rowErr.message);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["project", id] });
+      toast.success(
+        picks.length === 1 ? "Photo added — redraft to use it." : `${picks.length} photos added — redraft to use them.`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not upload photo");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removePhoto(photo: { id: string; path: string }) {
+    try {
+      await supabase.from("project_images").delete().eq("id", photo.id);
+      await supabase.storage.from("project-media").remove([photo.path]);
+      await queryClient.invalidateQueries({ queryKey: ["project", id] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not remove photo");
+    }
+  }
+
+
+
   async function updateOverall(field: "widthIn" | "depthIn" | "heightIn", value: number) {
     if (!model) return;
     const next: PlanModel = {
@@ -195,20 +251,84 @@ function PlanViewer() {
       </div>
     );
   }
+
+  const photoPanel = (
+    <section className="mt-8 rounded-lg border-2 border-foreground bg-card p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="tech-label text-blueprint">Reference photos</h2>
+        <p className="text-xs text-muted-foreground">
+          {data.photos.length} of {MAX_PHOTOS} · all views are read together when drafting
+        </p>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+        {data.photos.map((photo, i) => (
+          <div
+            key={photo.id}
+            className="relative aspect-square overflow-hidden rounded border border-border bg-muted"
+          >
+            {photo.url ? (
+              <img
+                src={photo.url}
+                alt={`Reference photo ${i + 1} of the subject`}
+                loading="lazy"
+                className="size-full object-cover"
+              />
+            ) : null}
+            <span className="absolute left-1 top-1 rounded bg-foreground/80 px-1 tech-label text-[10px] text-background">
+              {i + 1}
+            </span>
+            <button
+              type="button"
+              aria-label={`Remove reference photo ${i + 1}`}
+              onClick={() => removePhoto(photo)}
+              className="absolute right-1 top-1 rounded bg-foreground/80 p-1 text-background"
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        ))}
+        {data.photos.length < MAX_PHOTOS && (
+          <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded border-2 border-dashed border-border text-muted-foreground hover:border-accent hover:text-accent">
+            {uploading ? <Loader2 className="size-5 animate-spin" /> : <ImagePlus className="size-5" />}
+            <span className="tech-label">add</span>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              disabled={uploading}
+              onChange={(e) => {
+                addPhotos(e.target.files);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        )}
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Added or removed a view? Hit Redraft so the measurements are recalculated from the full set.
+      </p>
+    </section>
+  );
+
   if (!model || !scale || !overall) {
     return (
-      <div className="mx-auto max-w-6xl px-6 py-16 text-center">
-        <h1 className="text-2xl font-bold">No plan drafted yet</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The AI measurement never finished for this project.
-        </p>
-        <Button className="mt-6" onClick={regenerate} disabled={regenerating}>
-          {regenerating ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-          Draft the plan
-        </Button>
-      </div>
+      <main className="mx-auto max-w-6xl px-6 py-16">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">No plan drafted yet</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Add every view you have, then draft the plan from the full set.
+          </p>
+          <Button className="mt-6" onClick={regenerate} disabled={regenerating}>
+            {regenerating ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            Draft the plan
+          </Button>
+        </div>
+        {photoPanel}
+      </main>
     );
   }
+
 
   const sqft = sheetAreaSqIn(rows) / 144;
 
@@ -242,6 +362,12 @@ function PlanViewer() {
           </Button>
         </div>
       </div>
+
+      {photoPanel}
+
+
+
+
 
       {/* Scale controls */}
       <section className="mt-8 rounded-lg border-2 border-foreground bg-card p-6">

@@ -63,7 +63,7 @@ function NewProject() {
     if (!files) return;
     const next = Array.from(files)
       .filter((f) => f.type.startsWith("image/"))
-      .slice(0, 6 - picks.length)
+      .slice(0, 8 - picks.length)
       .map((file) => ({ file, url: URL.createObjectURL(file) }));
     setPicks((p) => [...p, ...next]);
   }
@@ -137,8 +137,10 @@ function NewProject() {
         <section className="rounded-lg border-2 border-foreground bg-card p-6">
           <h2 className="tech-label text-blueprint">01 / Photos</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Up to 6 images. Straight-on shots of the front and one side give the best results.
+            Add up to 8 reference images — they are all read together. Straight-on shots of each face plus a
+            corner view and a couple of detail close-ups give the best results.
           </p>
+
 
           <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4">
             {picks.map((p, i) => (
@@ -154,7 +156,7 @@ function NewProject() {
                 </button>
               </div>
             ))}
-            {picks.length < 6 && (
+            {picks.length < 8 && (
               <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded border-2 border-dashed border-border text-muted-foreground hover:border-accent hover:text-accent">
                 <ImagePlus className="size-5" />
                 <span className="tech-label">add</span>
