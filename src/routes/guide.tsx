@@ -5,17 +5,17 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/guide")({
   head: () => ({
     meta: [
-      { title: "User guide — how to turn photos into miniature plans | Minim" },
+      { title: "User guide — how to turn photos into miniature plans | Shrinkify" },
       {
         name: "description",
         content:
-          "Step-by-step guide to photographing a building, choosing a dollhouse scale, reading the cut list and building from the printed Minim plan pack.",
+          "Step-by-step guide to photographing a building, choosing a dollhouse scale, reading the cut list and building from the printed Shrinkify plan pack.",
       },
       { property: "og:title", content: "User guide — photos to miniature woodworking plans" },
       {
         property: "og:description",
         content:
-          "How to shoot usable photos, calibrate scale, read the cut list and build from a Minim plan pack.",
+          "How to shoot usable photos, calibrate scale, read the cut list and build from a Shrinkify plan pack.",
       },
       { property: "og:type", content: "article" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -29,7 +29,7 @@ const SECTIONS = [
     id: "photos",
     icon: Camera,
     label: "01 / Photograph",
-    title: "Shoot photos Minim can read",
+    title: "Shoot photos Shrinkify can read",
     lead: "The plan is only as good as what the photos show. Five minutes of care here saves an hour of corrections later.",
     dos: [
       "One straight-on shot of the front, standing back far enough that the walls look parallel.",
@@ -67,7 +67,7 @@ const SECTIONS = [
     lead: "Scale decides how big the model gets. Stock thickness decides how the parts fit together.",
     dos: [
       "1:12 for classic dollhouse furniture-compatible builds. 1:24 for a display piece. 1:48 for a shelf model.",
-      "Or set a target height — \"18 inches tall\" — and Minim solves the ratio for you.",
+      "Or set a target height — \"18 inches tall\" — and Shrinkify solves the ratio for you.",
       "Match stock thickness to what's actually on your bench (1/8\", 1/4\", 1/2\" and so on).",
       "Everything is recomputed live in the Scale Bench, so try a few sizes before printing.",
     ],
@@ -141,7 +141,7 @@ function Guide() {
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-5">
           <Link to="/" className="flex items-baseline gap-2">
-            <span className="text-xl font-extrabold tracking-tight">MINIM</span>
+            <span className="text-xl font-extrabold tracking-tight">SHRINKIFY</span>
             <span className="tech-label text-blueprint">plan works</span>
           </Link>
           <Button asChild size="sm">
@@ -244,7 +244,7 @@ function Guide() {
       </main>
 
       <footer className="mx-auto max-w-4xl px-6 py-10">
-        <p className="tech-label text-muted-foreground">Minim — plan works · built for sawdust</p>
+        <p className="tech-label text-muted-foreground">Shrinkify — plan works · built for sawdust</p>
       </footer>
     </div>
   );

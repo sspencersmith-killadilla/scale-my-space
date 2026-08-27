@@ -8,9 +8,9 @@ import { Walkthrough, useWalkthrough } from "@/components/Walkthrough";
 export const Route = createFileRoute("/_authenticated/projects/")({
   head: () => ({
     meta: [
-      { title: "My plan projects — Minim" },
+      { title: "My plan projects — Shrinkify" },
       { name: "description", content: "Your saved photo-to-miniature woodworking plan projects." },
-      { property: "og:title", content: "My plan projects — Minim" },
+      { property: "og:title", content: "My plan projects — Shrinkify" },
       {
         property: "og:description",
         content: "Your saved photo-to-miniature woodworking plan projects.",
@@ -68,7 +68,7 @@ function ProjectsList() {
           <Hammer className="mx-auto size-6 text-accent" />
           <h2 className="mt-4 text-xl font-bold">No plans yet</h2>
           <p className="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
-            Upload photos of a building, choose a scale, and Minim will draft the cut list and
+            Upload photos of a building, choose a scale, and Shrinkify will draft the cut list and
             drawings for you.
           </p>
           <Button asChild className="mt-6">

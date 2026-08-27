@@ -6,13 +6,13 @@ import { useAuth } from "@/hooks/useAuth";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Minim — Photo to Miniature Woodworking Plans" },
+      { title: "Shrinkify — Photo to Miniature Woodworking Plans" },
       {
         name: "description",
         content:
           "Upload photos of a real building, pick a dollhouse scale, and get a printable cut list, elevations and assembly plan.",
       },
-      { property: "og:title", content: "Minim — Photo to Miniature Woodworking Plans" },
+      { property: "og:title", content: "Shrinkify — Photo to Miniature Woodworking Plans" },
       {
         property: "og:description",
         content:
@@ -59,7 +59,7 @@ function Landing() {
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
           <div className="flex items-baseline gap-2">
-            <span className="text-xl font-extrabold tracking-tight">MINIM</span>
+            <span className="text-xl font-extrabold tracking-tight">SHRINKIFY</span>
             <span className="tech-label text-blueprint">plan works</span>
           </div>
           <nav className="flex items-center gap-2">
@@ -98,7 +98,7 @@ function Landing() {
                 <span className="text-blueprint">Cut list included.</span>
               </h1>
               <p className="mt-6 max-w-lg text-lg text-muted-foreground">
-                Photograph the house you grew up in, the corner shop, a barn on a back road. Minim
+                Photograph the house you grew up in, the corner shop, a barn on a back road. Shrinkify
                 estimates its real dimensions, shrinks it to the scale you choose, and hands you a
                 printable woodworking plan pack.
               </p>
@@ -199,7 +199,7 @@ function Landing() {
       </main>
 
       <footer className="mx-auto max-w-6xl px-6 py-10">
-        <p className="tech-label text-muted-foreground">Minim — plan works · built for sawdust</p>
+        <p className="tech-label text-muted-foreground">Shrinkify — plan works · built for sawdust</p>
       </footer>
     </div>
   );

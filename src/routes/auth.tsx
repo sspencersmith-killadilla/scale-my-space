@@ -12,12 +12,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in — Minim plan works" },
+      { title: "Sign in — Shrinkify plan works" },
       {
         name: "description",
         content: "Sign in to generate and save scaled woodworking plans from your photos.",
       },
-      { property: "og:title", content: "Sign in — Minim plan works" },
+      { property: "og:title", content: "Sign in — Shrinkify plan works" },
       {
         property: "og:description",
         content: "Sign in to generate and save scaled woodworking plans from your photos.",
@@ -87,7 +87,7 @@ function AuthPage() {
     <div className="grid-paper flex min-h-screen items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-md">
         <Link to="/" className="tech-label text-blueprint">
-          ← Minim plan works
+          ← Shrinkify plan works
         </Link>
         <div className="mt-4 rounded-lg border-2 border-foreground bg-card p-7 shadow-[8px_8px_0_0_var(--kraft)]">
           <h1 className="text-2xl font-extrabold tracking-tight">Your workbench</h1>

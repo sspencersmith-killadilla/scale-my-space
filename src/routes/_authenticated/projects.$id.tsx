@@ -38,12 +38,12 @@ import {
 export const Route = createFileRoute("/_authenticated/projects/$id")({
   head: () => ({
     meta: [
-      { title: "Plan sheets — Minim" },
+      { title: "Plan sheets — Shrinkify" },
       {
         name: "description",
         content: "Cut list, scaled elevations, cutting layout and printable PDF for your model.",
       },
-      { property: "og:title", content: "Plan sheets — Minim" },
+      { property: "og:title", content: "Plan sheets — Shrinkify" },
       {
         property: "og:description",
         content: "Cut list, scaled elevations, cutting layout and printable PDF for your model.",

@@ -22,12 +22,12 @@ import { SCALE_PRESETS, THICKNESS_OPTIONS, MATERIAL_OPTIONS } from "@/lib/plan-m
 export const Route = createFileRoute("/_authenticated/projects/new")({
   head: () => ({
     meta: [
-      { title: "New plan — upload photos — Minim" },
+      { title: "New plan — upload photos — Shrinkify" },
       {
         name: "description",
         content: "Upload building photos and choose a scale to generate woodworking plans.",
       },
-      { property: "og:title", content: "New plan — upload photos — Minim" },
+      { property: "og:title", content: "New plan — upload photos — Shrinkify" },
       {
         property: "og:description",
         content: "Upload building photos and choose a scale to generate woodworking plans.",
