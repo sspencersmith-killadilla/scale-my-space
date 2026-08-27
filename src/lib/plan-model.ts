@@ -833,6 +833,38 @@ export function ensureMasses(model: PlanModel): PlanMass[] {
   ];
 }
 
+/** True when the mass has a round (revolved) footprint. */
+export function isRoundMass(m: PlanMass) {
+  return m.kind === "cylinder" || m.kind === "swept";
+}
+
+/** Widest profile radius of a swept/extruded mass, in inches. */
+export function profileMaxX(m: PlanMass) {
+  return (m.profile ?? []).reduce((a, p) => Math.max(a, Math.abs(p.xIn)), 0);
+}
+
+/** Footprint width (X) of any mass kind. */
+export function massWidth(m: PlanMass) {
+  if (m.kind === "swept") return Math.max(m.diameterIn, profileMaxX(m) * 2);
+  if (isRoundMass(m) || m.kind === "prism") return m.diameterIn || m.widthIn;
+  return m.widthIn;
+}
+
+/** Footprint depth (Z) of any mass kind. */
+export function massDepth(m: PlanMass) {
+  if (m.kind === "swept") return Math.max(m.diameterIn, profileMaxX(m) * 2);
+  if (isRoundMass(m) || m.kind === "prism") return m.diameterIn || m.depthIn;
+  if (m.kind === "extruded") return Math.max(m.depthIn, profileMaxX(m));
+  return m.depthIn;
+}
+
+/** Total height including the top treatment or drawn profile. */
+export function massTotalHeight(m: PlanMass) {
+  const profileTop = (m.profile ?? []).reduce((a, p) => Math.max(a, p.yIn), 0);
+  const own = m.kind === "swept" ? Math.max(m.heightIn, profileTop) : m.heightIn;
+  return own + Math.max(m.top.riseIn, 0);
+}
+
 /** Bounding box of all masses, in real-world inches. */
 export function massBounds(masses: PlanMass[]) {
   let minX = Infinity;
@@ -841,14 +873,15 @@ export function massBounds(masses: PlanMass[]) {
   let maxZ = -Infinity;
   let maxY = 0;
   for (const m of masses) {
-    const w = m.kind === "cylinder" ? m.diameterIn : m.widthIn;
-    const dp = m.kind === "cylinder" ? m.diameterIn : m.depthIn;
+    const w = massWidth(m);
+    const dp = massDepth(m);
     minX = Math.min(minX, m.xIn - w / 2);
     maxX = Math.max(maxX, m.xIn + w / 2);
     minZ = Math.min(minZ, m.zIn - dp / 2);
     maxZ = Math.max(maxZ, m.zIn + dp / 2);
-    maxY = Math.max(maxY, m.baseYIn + m.heightIn + Math.max(m.top.riseIn, 0));
+    maxY = Math.max(maxY, m.baseYIn + massTotalHeight(m));
   }
+
   if (!Number.isFinite(minX)) return { minX: 0, maxX: 0, minZ: 0, maxZ: 0, maxY: 0, widthIn: 0, depthIn: 0 };
   return { minX, maxX, minZ, maxZ, maxY, widthIn: maxX - minX, depthIn: maxZ - minZ };
 }
