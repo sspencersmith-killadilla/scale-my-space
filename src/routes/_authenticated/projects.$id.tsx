@@ -28,6 +28,9 @@ import {
   THICKNESS_OPTIONS,
   buildCutList,
   ensureMasses,
+  isRoundMass,
+  massWidth,
+  massDepth,
   formatFeetInches,
   formatInches,
   modelOverall,
@@ -624,10 +627,10 @@ function PlanViewer() {
                         <td className="px-4 py-3 font-sans font-medium">{m.name}</td>
                         <td className="px-4 py-3">{m.kind}</td>
                         <td className="px-4 py-3">
-                          {m.kind === "cylinder"
-                            ? `⌀ ${formatInches(m.diameterIn / denominator)}`
-                            : `${formatInches(m.widthIn / denominator)} × ${formatInches(
-                                m.depthIn / denominator,
+                          {isRoundMass(m)
+                            ? `⌀ ${formatInches(massWidth(m) / denominator)}`
+                            : `${formatInches(massWidth(m) / denominator)} × ${formatInches(
+                                massDepth(m) / denominator,
                               )}`}
                         </td>
                         <td className="px-4 py-3">{formatInches(m.heightIn / denominator)}</td>
