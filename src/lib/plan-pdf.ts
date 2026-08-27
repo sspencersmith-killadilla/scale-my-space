@@ -2,7 +2,11 @@ import { jsPDF } from "jspdf";
 import { nestParts } from "@/components/PanelLayout";
 import {
   buildCutList,
-  faceDimensions,
+  ensureMasses,
+  expandOpenings,
+  massBounds,
+  type PlanMass,
+
   formatFeetInches,
   formatInches,
   modelOverall,
