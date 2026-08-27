@@ -137,8 +137,10 @@ function NewProject() {
         <section className="rounded-lg border-2 border-foreground bg-card p-6">
           <h2 className="tech-label text-blueprint">01 / Photos</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Up to 6 images. Straight-on shots of the front and one side give the best results.
+            Add up to 8 reference images — they are all read together. Straight-on shots of each face plus a
+            corner view and a couple of detail close-ups give the best results.
           </p>
+
 
           <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4">
             {picks.map((p, i) => (
