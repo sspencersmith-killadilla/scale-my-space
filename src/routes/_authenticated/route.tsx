@@ -21,7 +21,7 @@ function AuthenticatedLayout() {
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link to="/projects" className="flex items-baseline gap-2">
-            <span className="text-lg font-extrabold tracking-tight">MINIM</span>
+            <span className="text-lg font-extrabold tracking-tight">SHRINKIFY</span>
             <span className="tech-label text-blueprint">plan works</span>
           </Link>
           <div className="flex items-center gap-3">

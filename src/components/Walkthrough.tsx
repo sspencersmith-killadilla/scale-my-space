@@ -2,21 +2,21 @@ import { useEffect, useState } from "react";
 import { Camera, Ruler, FileText, Hammer, X, ArrowRight, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const KEY = "minim.walkthrough.v1";
+const KEY = "shrinkify.walkthrough.v1";
 
 const SLIDES = [
   {
     icon: Camera,
     label: "Step 01 / Photograph",
     title: "Upload 1–6 photos",
-    body: "Start with a straight-on front shot, then add sides and any angle you have. Corners help most — they let Minim read depth as well as width.",
+    body: "Start with a straight-on front shot, then add sides and any angle you have. Corners help most — they let Shrinkify read depth as well as width.",
     tip: "Add one real measurement in the notes (\"the front door is 84 inches tall\") and every other dimension gets calibrated against it.",
   },
   {
     icon: Ruler,
     label: "Step 02 / Scale",
     title: "Choose a scale or a size",
-    body: "Pick a classic dollhouse ratio (1:12, 1:24, 1:48), type a custom ratio, or simply say how tall you want the finished model to stand and Minim solves the ratio for you.",
+    body: "Pick a classic dollhouse ratio (1:12, 1:24, 1:48), type a custom ratio, or simply say how tall you want the finished model to stand and Shrinkify solves the ratio for you.",
     tip: "Set your stock thickness too — the cut list compensates for butt joints so walls end up the right outside dimension.",
   },
   {

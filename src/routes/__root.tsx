@@ -80,13 +80,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Minim — Photo to Miniature Woodworking Plans" },
+      { title: "Shrinkify — Photo to Miniature Woodworking Plans" },
       {
         name: "description",
         content:
           "Turn photos of a real building into scaled woodworking plans, cut lists and printable drawings.",
       },
-      { name: "author", content: "Minim" },
+      { name: "author", content: "Shrinkify" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
