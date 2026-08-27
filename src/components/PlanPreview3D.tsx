@@ -202,7 +202,7 @@ function House({ model, scale, thicknessIn }: Props) {
             <meshStandardMaterial color={ROOF} roughness={0.9} />
           </mesh>
           <mesh
-            position={[0, dims.wall + roofRise / 2, -(dims.d / 2 + overhang) / 2]}
+            position={[0, dims.wall + roofRise - halfY, -halfZ]}
             rotation-x={-slopeAngle}
 
             castShadow
