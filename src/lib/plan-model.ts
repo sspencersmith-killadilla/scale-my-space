@@ -25,6 +25,10 @@ export interface PlanPart {
   /** Real-world panel height in inches. */
   heightIn: number;
   notes?: string;
+  /** Plain-language description of where the part sits on the finished model. */
+  location?: string;
+  /** How to cut it: grain, bevels, which openings come out of it. */
+  cutNotes?: string;
 }
 
 export type FaceKey = "front" | "back" | "left" | "right";
@@ -32,27 +36,77 @@ export type FaceKey = "front" | "back" | "left" | "right";
 export interface PlanOpening {
   face: FaceKey;
   kind: "window" | "door";
+  label?: string;
   /** Real-world inches from the left edge of that face to the opening's left edge. */
   xIn: number;
   /** Real-world inches from the bottom of that face to the opening's bottom edge. */
   yIn: number;
   widthIn: number;
   heightIn: number;
+  paneCols?: number;
+  paneRows?: number;
+  trimNote?: string;
+}
+
+export interface PlanDetailElement {
+  name: string;
+  description: string;
+  location: string;
+  materials: string;
+  howToMake: string[];
+}
+
+export interface PlanStep {
+  instruction: string;
+  detail: string;
+  tip: string;
+}
+
+export interface PlanStage {
+  title: string;
+  goal: string;
+  tools: string[];
+  parts: string[];
+  steps: PlanStep[];
+  check: string;
+}
+
+export interface PlanPaintArea {
+  area: string;
+  color: string;
+  colorMatch: string;
+  technique: string;
+}
+
+export interface PlanGlossaryEntry {
+  term: string;
+  definition: string;
 }
 
 export interface PlanModel {
   subject: string;
   style: string;
   stories: number;
+  overview: string;
+  difficulty: string;
+  estimatedHours: number;
   overall: { widthIn: number; depthIn: number; heightIn: number; wallHeightIn: number };
-  roof: { type: string; pitchNote: string; overhangIn: number };
+  roof: { type: string; pitchNote: string; overhangIn: number; buildNotes: string };
   parts: PlanPart[];
   openings: PlanOpening[];
+  detailElements: PlanDetailElement[];
+  assemblyStages: PlanStage[];
   assemblySteps: string[];
   finishingSteps: string[];
+  paintPlan: PlanPaintArea[];
+  toolsNeeded: string[];
+  suppliesNeeded: string[];
+  glossary: PlanGlossaryEntry[];
+  safetyNotes: string[];
   assumptions: string[];
   extraMaterials: string[];
 }
+
 
 export type ScaleMode = "ratio" | "target";
 
@@ -116,6 +170,17 @@ export interface CutListRow {
   thicknessIn: number;
   material: string;
   notes: string;
+  location: string;
+  cutNotes: string;
+  /** Openings that must be cut out of this panel, in model inches. */
+  openings: Array<{
+    label: string;
+    kind: "window" | "door";
+    fromLeftIn: number;
+    fromBottomIn: number;
+    widthIn: number;
+    heightIn: number;
+  }>;
 }
 
 const SNAP = 32; // snap to nearest 1/32"
@@ -124,6 +189,11 @@ export function snapInches(value: number): number {
   return Math.max(1 / SNAP, Math.round(value * SNAP) / SNAP);
 }
 
+const ROLE_FACE: Partial<Record<PartRole, FaceKey>> = {
+  "front-wall": "front",
+  "back-wall": "back",
+};
+
 /**
  * Butt-joint compensation: front/back panels overlap the side panels, so the
  * side panels lose one stock thickness at each end. Roof panels gain the overhang.
@@ -131,6 +201,7 @@ export function snapInches(value: number): number {
 export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow[] {
   const d = resolveDenominator(model, scale);
   const t = scale.stockThicknessIn;
+  let sideWallSeen = 0;
 
   return model.parts.map((part) => {
     let length = part.widthIn / d;
@@ -140,11 +211,32 @@ export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow
 
     if (part.role === "side-wall") {
       length = Math.max(length - 2 * t, length * 0.25);
-      notes.push("Trimmed 2× stock thickness for butt joints");
+      notes.push(
+        `Trimmed 2× ${formatInches(t)} stock thickness so the front and back panels wrap this panel's ends (butt joint)`,
+      );
     }
     if (part.role === "floor" || part.role === "base") {
       notes.push("Fits inside the wall box");
     }
+
+    // Which face's openings belong to this panel?
+    let face: FaceKey | undefined = ROLE_FACE[part.role];
+    if (part.role === "side-wall") {
+      face = sideWallSeen === 0 ? "left" : "right";
+      sideWallSeen += 1;
+    }
+    const openings = face
+      ? model.openings
+          .filter((o) => o.face === face)
+          .map((o) => ({
+            label: o.label || `${o.kind} on ${o.face}`,
+            kind: o.kind,
+            fromLeftIn: snapInches(o.xIn / d),
+            fromBottomIn: snapInches(o.yIn / d),
+            widthIn: snapInches(o.widthIn / d),
+            heightIn: snapInches(o.heightIn / d),
+          }))
+      : [];
 
     return {
       id: part.id,
@@ -156,9 +248,13 @@ export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow
       thicknessIn: t,
       material: scale.material,
       notes: notes.join(". "),
+      location: part.location ?? "",
+      cutNotes: part.cutNotes ?? "",
+      openings,
     };
   });
 }
+
 
 /** Total board feet-ish estimate: square inches of stock needed, plus 20% waste. */
 export function sheetAreaSqIn(rows: CutListRow[]): number {
@@ -239,12 +335,22 @@ export function emptyPlanModel(): PlanModel {
     subject: "",
     style: "",
     stories: 1,
+    overview: "",
+    difficulty: "beginner",
+    estimatedHours: 0,
     overall: { widthIn: 0, depthIn: 0, heightIn: 0, wallHeightIn: 0 },
-    roof: { type: "gable", pitchNote: "", overhangIn: 0 },
+    roof: { type: "gable", pitchNote: "", overhangIn: 0, buildNotes: "" },
     parts: [],
     openings: [],
+    detailElements: [],
+    assemblyStages: [],
     assemblySteps: [],
     finishingSteps: [],
+    paintPlan: [],
+    toolsNeeded: [],
+    suppliesNeeded: [],
+    glossary: [],
+    safetyNotes: [],
     assumptions: [],
     extraMaterials: [],
   };
@@ -259,13 +365,18 @@ export function normalizePlanModel(raw: unknown): PlanModel {
     typeof v === "number" && Number.isFinite(v) ? v : fallback;
   const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback);
   const arr = (v: unknown) => (Array.isArray(v) ? v : []);
-  const overall = (r['overall'] ?? {}) as Record<string, unknown>;
-  const roof = (r['roof'] ?? {}) as Record<string, unknown>;
+  const strs = (v: unknown) => arr(v).map((s) => String(s)).filter(Boolean);
+  const obj = (v: unknown) => (v ?? {}) as Record<string, unknown>;
+  const overall = obj(r['overall']);
+  const roof = obj(r['roof']);
 
   return {
     subject: str(r['subject'], "Photographed subject"),
     style: str(r['style']),
     stories: Math.max(1, Math.round(num(r['stories'], 1))),
+    overview: str(r['overview']),
+    difficulty: str(r['difficulty'], "beginner"),
+    estimatedHours: num(r['estimatedHours'], 0),
     overall: {
       widthIn: num(overall['widthIn'], 120),
       depthIn: num(overall['depthIn'], 96),
@@ -276,9 +387,10 @@ export function normalizePlanModel(raw: unknown): PlanModel {
       type: str(roof['type'], "gable"),
       pitchNote: str(roof['pitchNote']),
       overhangIn: num(roof['overhangIn'], 0),
+      buildNotes: str(roof['buildNotes']),
     },
     parts: arr(r['parts']).map((p, i) => {
-      const o = (p ?? {}) as Record<string, unknown>;
+      const o = obj(p);
       return {
         id: str(o['id'], `part-${i + 1}`),
         name: str(o['name'], `Part ${i + 1}`),
@@ -287,23 +399,75 @@ export function normalizePlanModel(raw: unknown): PlanModel {
         widthIn: num(o['widthIn'], 12),
         heightIn: num(o['heightIn'], 12),
         notes: str(o['notes']),
+        location: str(o['location']),
+        cutNotes: str(o['cutNotes']),
       };
     }),
     openings: arr(r['openings']).map((p) => {
-      const o = (p ?? {}) as Record<string, unknown>;
+      const o = obj(p);
       const face = str(o['face'], "front") as FaceKey;
       return {
         face: (["front", "back", "left", "right"] as string[]).includes(face) ? face : "front",
         kind: str(o['kind'], "window") === "door" ? ("door" as const) : ("window" as const),
+        label: str(o['label']),
         xIn: num(o['xIn']),
         yIn: num(o['yIn']),
         widthIn: num(o['widthIn'], 30),
         heightIn: num(o['heightIn'], 48),
+        paneCols: Math.max(1, Math.round(num(o['paneCols'], 1))),
+        paneRows: Math.max(1, Math.round(num(o['paneRows'], 1))),
+        trimNote: str(o['trimNote']),
       };
     }),
-    assemblySteps: arr(r['assemblySteps']).map((s) => String(s)),
-    finishingSteps: arr(r['finishingSteps']).map((s) => String(s)),
-    assumptions: arr(r['assumptions']).map((s) => String(s)),
-    extraMaterials: arr(r['extraMaterials']).map((s) => String(s)),
+    detailElements: arr(r['detailElements']).map((p) => {
+      const o = obj(p);
+      return {
+        name: str(o['name'], "Detail"),
+        description: str(o['description']),
+        location: str(o['location']),
+        materials: str(o['materials']),
+        howToMake: strs(o['howToMake']),
+      };
+    }),
+    assemblyStages: arr(r['assemblyStages']).map((p, i) => {
+      const o = obj(p);
+      return {
+        title: str(o['title'], `Stage ${i + 1}`),
+        goal: str(o['goal']),
+        tools: strs(o['tools']),
+        parts: strs(o['parts']),
+        steps: arr(o['steps']).map((s) => {
+          if (typeof s === "string") return { instruction: s, detail: "", tip: "" };
+          const so = obj(s);
+          return {
+            instruction: str(so['instruction']),
+            detail: str(so['detail']),
+            tip: str(so['tip']),
+          };
+        }),
+        check: str(o['check']),
+      };
+    }),
+    paintPlan: arr(r['paintPlan']).map((p) => {
+      const o = obj(p);
+      return {
+        area: str(o['area']),
+        color: str(o['color']),
+        colorMatch: str(o['colorMatch']),
+        technique: str(o['technique']),
+      };
+    }),
+    toolsNeeded: strs(r['toolsNeeded']),
+    suppliesNeeded: strs(r['suppliesNeeded']),
+    glossary: arr(r['glossary']).map((p) => {
+      const o = obj(p);
+      return { term: str(o['term']), definition: str(o['definition']) };
+    }),
+    safetyNotes: strs(r['safetyNotes']),
+    assemblySteps: strs(r['assemblySteps']),
+    finishingSteps: strs(r['finishingSteps']),
+    assumptions: strs(r['assumptions']),
+    extraMaterials: strs(r['extraMaterials']),
   };
 }
+
