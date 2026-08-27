@@ -200,16 +200,78 @@ export function buildPlanPdf(
   summary.forEach((line, i) => doc.text(line, MARGIN, cy + 36 + i * 14));
   footer(doc, page);
 
+  /* ---------- Overview / tools ---------- */
+  const bulletSection = (
+    heading: string,
+    items: string[],
+    startY: number,
+  ): number => {
+    let yy = startY;
+    if (!items.length) return yy;
+    if (yy > H - 120) {
+      footer(doc, page);
+      doc.addPage();
+      page += 1;
+      header(doc, heading, subtitle);
+      yy = 92;
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...INK);
+    doc.text(heading.toUpperCase(), MARGIN, yy);
+    yy += 18;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    for (const item of items) {
+      if (yy > H - 70) {
+        footer(doc, page);
+        doc.addPage();
+        page += 1;
+        header(doc, `${heading} (cont.)`, subtitle);
+        yy = 92;
+      }
+      doc.setTextColor(...BLUE);
+      doc.text("•", MARGIN, yy);
+      doc.setTextColor(...INK);
+      yy = wrapped(doc, item, MARGIN + 14, yy, contentW - 14, 12) + 6;
+    }
+    return yy + 12;
+  };
+
+  doc.addPage();
+  page += 1;
+  header(doc, "Before you start", subtitle);
+  let y = 92;
+  if (model.overview) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...INK);
+    y = wrapped(doc, model.overview, MARGIN, y, contentW, 14) + 10;
+    doc.setFont("courier", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...GREY);
+    doc.text(
+      `${model.difficulty} build${model.estimatedHours ? ` · about ${model.estimatedHours} hours` : ""}`,
+      MARGIN,
+      y,
+    );
+    y += 24;
+  }
+  y = bulletSection("Tools you need", model.toolsNeeded, y);
+  y = bulletSection("Supplies", [...model.suppliesNeeded, ...model.extraMaterials], y);
+  y = bulletSection("Safety", model.safetyNotes, y);
+  footer(doc, page);
+
   /* ---------- Cut list ---------- */
   doc.addPage();
   page += 1;
   header(doc, "Cut list", subtitle);
-  let y = 90;
-  const cols = [MARGIN, MARGIN + 190, MARGIN + 240, MARGIN + 330, MARGIN + 400];
+  y = 90;
+  const cols = [MARGIN, MARGIN + 150, MARGIN + 185, MARGIN + 275, MARGIN + 345];
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
   doc.setTextColor(...GREY);
-  ["PART", "QTY", "LENGTH × WIDTH", "THICKNESS", "NOTES"].forEach((h, i) =>
+  ["PART", "QTY", "LENGTH × WIDTH", "THICK", "WHERE IT GOES / HOW TO CUT"].forEach((h, i) =>
     doc.text(h, cols[i]!, y),
   );
   y += 6;
@@ -218,27 +280,55 @@ export function buildPlanPdf(
   doc.line(MARGIN, y, W - MARGIN, y);
   y += 14;
 
-  doc.setFont("courier", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...INK);
+  const noteW = W - MARGIN - cols[4]!;
   for (const r of rows) {
-    if (y > H - 70) {
+    const noteText = [r.location, r.cutNotes, r.notes].filter(Boolean).join(" — ") || "—";
+    const openingText = r.openings.map(
+      (o) =>
+        `Cut out ${o.label}: ${formatInches(o.widthIn)} × ${formatInches(o.heightIn)}, ${formatInches(o.fromLeftIn)} from left edge, ${formatInches(o.fromBottomIn)} up from bottom`,
+    );
+    doc.setFont("courier", "normal");
+    doc.setFontSize(9);
+    const nameLines = doc.splitTextToSize(r.name, 140) as string[];
+    doc.setFontSize(8);
+    const noteLines = doc.splitTextToSize(noteText, noteW) as string[];
+    const openLines = openingText.flatMap(
+      (t) => doc.splitTextToSize(t, noteW) as string[],
+    );
+    const rowH = Math.max(nameLines.length * 11, (noteLines.length + openLines.length) * 10) + 10;
+    if (y + rowH > H - 60) {
       footer(doc, page);
       doc.addPage();
       page += 1;
       header(doc, "Cut list (cont.)", subtitle);
       y = 90;
     }
-    const nameLines = doc.splitTextToSize(r.name, 180) as string[];
-    const noteLines = doc.splitTextToSize(r.notes || "—", contentW - 400) as string[];
+    doc.setFont("courier", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...INK);
     nameLines.forEach((l, i) => doc.text(l, cols[0]!, y + i * 11));
     doc.text(String(r.quantity), cols[1]!, y);
     doc.text(`${formatInches(r.lengthIn)} × ${formatInches(r.widthIn)}`, cols[2]!, y);
     doc.text(formatInches(r.thicknessIn), cols[3]!, y);
-    noteLines.slice(0, 3).forEach((l, i) => doc.text(l, cols[4]!, y + i * 11));
-    y += Math.max(nameLines.length, Math.min(noteLines.length, 3)) * 11 + 8;
+    doc.setFontSize(8);
+    let ny = y;
+    noteLines.forEach((l) => {
+      doc.setTextColor(...INK);
+      doc.text(l, cols[4]!, ny);
+      ny += 10;
+    });
+    openLines.forEach((l) => {
+      doc.setTextColor(...BLUE);
+      doc.text(l, cols[4]!, ny);
+      ny += 10;
+    });
+    doc.setTextColor(...INK);
+    y += rowH;
+    doc.setDrawColor(230, 226, 218);
+    doc.line(MARGIN, y - 5, W - MARGIN, y - 5);
   }
   footer(doc, page);
+
 
   /* ---------- Elevations ---------- */
   doc.addPage();
