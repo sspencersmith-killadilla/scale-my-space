@@ -26,7 +26,7 @@ export const generatePlan = createServerFn({ method: "POST" })
       .eq("project_id", data.projectId)
       .order("sort_order", { ascending: true });
 
-    const paths = (images ?? []).map((i) => i.storage_path).slice(0, 4);
+    const paths = (images ?? []).map((i) => i.storage_path).slice(0, 8);
     if (!paths.length) throw new Error("Upload at least one photo before generating a plan.");
 
     // Inline the photos as base64 data URLs: the model provider cannot always
@@ -45,6 +45,14 @@ export const generatePlan = createServerFn({ method: "POST" })
     }
     if (!imageUrls.length) throw new Error("Could not read the uploaded photos.");
 
+    // Label each photo so the model can cross-reference the views it is combining.
+    const photoBlocks = imageUrls.flatMap((url, i) => [
+      {
+        type: "text" as const,
+        text: `Reference photo ${i + 1} of ${imageUrls.length} (same subject, different view):`,
+      },
+      { type: "image_url" as const, image_url: { url } },
+    ]);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -64,15 +72,14 @@ export const generatePlan = createServerFn({ method: "POST" })
                 text: buildUserPrompt({
                   subjectNotes: project.subject_notes ?? "",
                   referenceNote: project.reference_note ?? "",
+                  photoCount: imageUrls.length,
                 }),
               },
-              ...imageUrls.map((url) => ({
-                type: "image_url" as const,
-                image_url: { url },
-              })),
+              ...photoBlocks,
             ],
           },
         ],
+
         response_format: {
           type: "json_schema",
           json_schema: { name: "woodworking_plan", strict: true, schema: planJsonSchema },
