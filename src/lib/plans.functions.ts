@@ -256,7 +256,12 @@ export const generatePlan = createServerFn({ method: "POST" })
     }
 
 
-    model.structureNotes = structureNotes;
+    model.structureNotes = [
+      structureNotes,
+      detailNotes.length ? `Detail passes (${level}):\n${detailNotes.map((n) => `- ${n}`).join("\n")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     const disclosed = new Set([...model.knownDifferences, ...(review.knownDifferences ?? [])]);
     model.knownDifferences = [...disclosed].filter(Boolean);
 
