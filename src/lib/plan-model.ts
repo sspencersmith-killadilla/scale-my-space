@@ -44,7 +44,7 @@ export interface PlanModel {
   subject: string;
   style: string;
   stories: number;
-  overall: { widthIn: number; depthIn: number; heightIn: number };
+  overall: { widthIn: number; depthIn: number; heightIn: number; wallHeightIn: number };
   roof: { type: string; pitchNote: string; overhangIn: number };
   parts: PlanPart[];
   openings: PlanOpening[];
@@ -101,6 +101,7 @@ export function modelOverall(model: PlanModel, scale: ScaleSettings) {
     widthIn: model.overall.widthIn / d,
     depthIn: model.overall.depthIn / d,
     heightIn: model.overall.heightIn / d,
+    wallHeightIn: model.overall.wallHeightIn / d,
   };
 }
 
@@ -238,7 +239,7 @@ export function emptyPlanModel(): PlanModel {
     subject: "",
     style: "",
     stories: 1,
-    overall: { widthIn: 0, depthIn: 0, heightIn: 0 },
+    overall: { widthIn: 0, depthIn: 0, heightIn: 0, wallHeightIn: 0 },
     roof: { type: "gable", pitchNote: "", overhangIn: 0 },
     parts: [],
     openings: [],
@@ -269,6 +270,7 @@ export function normalizePlanModel(raw: unknown): PlanModel {
       widthIn: num(overall['widthIn'], 120),
       depthIn: num(overall['depthIn'], 96),
       heightIn: num(overall['heightIn'], 120),
+      wallHeightIn: num(overall['wallHeightIn'], num(overall['heightIn'], 120)),
     },
     roof: {
       type: str(roof['type'], "gable"),
