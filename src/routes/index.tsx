@@ -108,6 +108,9 @@ function Landing() {
                     Generate a plan <ArrowRight className="ml-2 size-4" />
                   </Link>
                 </Button>
+                <Button asChild variant="outline" size="lg">
+                  <Link to="/guide">Read the guide</Link>
+                </Button>
                 <span className="tech-label text-muted-foreground">
                   1:12 · 1:24 · 1:48 · custom
                 </span>
