@@ -132,7 +132,92 @@ export const generatePlan = createServerFn({ method: "POST" })
 
     let model = await measure(data.refineNotes);
 
-    /* ---- Pass 3: review the geometry against the photos, then redraft once ---- */
+    /* ---- Pass 3: refine the biggest masses into faithful sub-shapes ---- */
+    const level: DetailLevel = data.detailLevel ?? "standard";
+    const budget = DETAIL_BUDGET[level];
+    const detailNotes: string[] = [];
+
+    if (budget.massPasses > 0 && model.masses.length) {
+      const bounds = massBounds(ensureMasses(model));
+      const targets = [...model.masses]
+        .sort((a, b) => massWidth(b) * massTotalHeight(b) - massWidth(a) * massTotalHeight(a))
+        .slice(0, budget.massPasses);
+      const geometrySummary = summarizeGeometry(model);
+
+      const details = await Promise.all(
+        targets.map(async (mass) => {
+          try {
+            const content = await callGateway(key, {
+              messages: [
+                { role: "system", content: DETAIL_SYSTEM_PROMPT },
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "text",
+                      text: buildDetailPrompt({
+                        massSummary: summarizeMass(mass),
+                        geometrySummary,
+                        structureNotes,
+                        level,
+                      }),
+                    },
+                    ...photoBlocks,
+                  ],
+                },
+              ],
+              response_format: {
+                type: "json_schema",
+                json_schema: { name: "mass_detail", strict: true, schema: detailJsonSchema },
+              },
+            });
+            return { mass, raw: parseJson(content) };
+          } catch (e) {
+            console.error("Detail pass failed for mass", mass.id, e);
+            return null;
+          }
+        }),
+      );
+
+      const maxSpan = Math.max(bounds.widthIn, bounds.depthIn, bounds.maxY, 1) * 1.2;
+      for (const result of details) {
+        if (!result) continue;
+        // Reuse the plan normalizer so sub-geometry is defaulted the same way.
+        const sub = normalizePlanModel({
+          ...(result.raw as Record<string, unknown>),
+          overall: model.overall,
+        }) as PlanModel;
+        const existingIds = new Set(model.masses.map((m) => m.id));
+        const parent = result.mass;
+
+        for (const m of sub.masses) {
+          const w = massWidth(m);
+          const h = massTotalHeight(m);
+          if (w <= 0 || h <= 0 || w > maxSpan || h > maxSpan) continue;
+          let id = m.id && !existingIds.has(m.id) ? m.id : `${parent.id}-d${model.masses.length + 1}`;
+          while (existingIds.has(id)) id = `${id}x`;
+          existingIds.add(id);
+          model.masses.push({ ...m, id, parentId: m.parentId || parent.id });
+        }
+        for (const o of sub.openings) {
+          if (o.widthIn <= 0 || o.heightIn <= 0) continue;
+          model.openings.push({ ...o, massId: o.massId || parent.id });
+        }
+        for (const f of sub.features) {
+          model.features.push({ ...f, massId: f.massId || parent.id });
+        }
+        const note = typeof (result.raw as { notes?: unknown }).notes === "string"
+          ? ((result.raw as { notes: string }).notes ?? "").trim()
+          : "";
+        if (note) detailNotes.push(`${parent.name}: ${note}`);
+      }
+
+      // Re-normalize so the overall envelope covers the new sub-shapes.
+      model = normalizePlanModel(model);
+    }
+
+    /* ---- Pass 4: review the geometry against the photos, then redraft once ---- */
+
     let review: { verdict?: string; corrections?: string[]; knownDifferences?: string[] } = {};
     try {
       const reviewContent = await callGateway(key, {
