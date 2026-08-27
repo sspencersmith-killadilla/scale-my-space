@@ -156,7 +156,7 @@ function NewProject() {
                 </button>
               </div>
             ))}
-            {picks.length < 6 && (
+            {picks.length < 8 && (
               <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded border-2 border-dashed border-border text-muted-foreground hover:border-accent hover:text-accent">
                 <ImagePlus className="size-5" />
                 <span className="tech-label">add</span>
