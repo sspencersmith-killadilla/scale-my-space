@@ -35,7 +35,28 @@ export interface PlanPart {
 
 export type FaceKey = "front" | "back" | "left" | "right";
 
-export type MassKind = "block" | "cylinder";
+export type MassKind =
+  | "block"
+  | "cylinder"
+  /** Battered wall, plinth, spire base: footprint shrinks (or grows) towards the top. */
+  | "tapered"
+  /** Polygonal tower or bay, `sides` faces. */
+  | "prism"
+  /** An arcade wall: a block pierced by `bayCount` repeated arched bays. */
+  | "arch-block"
+  /** Revolved silhouette: dome, turret cap, baluster, column, urn. */
+  | "swept"
+  /** A drawn cross-section pushed along a length: cornice, moulding, sill, ridge cap. */
+  | "extruded";
+
+/** A point on a drawn profile, in real-world inches. */
+export interface ProfilePoint {
+  /** Half-width (radius) for swept shapes, or cross-section width for extrusions. */
+  xIn: number;
+  /** Height above the profile's base. */
+  yIn: number;
+}
+
 
 export type TopTreatment =
   | "flat"
