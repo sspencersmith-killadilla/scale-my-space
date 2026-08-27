@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PlanPreview3D } from "@/components/PlanPreview3D";
+
 import {
   Select,
   SelectContent,
@@ -518,6 +520,8 @@ function PlanViewer() {
       <Tabs defaultValue="cutlist" className="mt-10">
         <TabsList className="flex-wrap">
           <TabsTrigger value="cutlist">Cut list</TabsTrigger>
+          <TabsTrigger value="preview3d">3D preview</TabsTrigger>
+
           <TabsTrigger value="drawings">Elevations</TabsTrigger>
           <TabsTrigger value="layout">Cutting layout</TabsTrigger>
           <TabsTrigger value="build">Step-by-step</TabsTrigger>
@@ -574,7 +578,17 @@ function PlanViewer() {
           </div>
         </TabsContent>
 
+        <TabsContent value="preview3d" className="pt-6">
+          <PlanPreview3D model={model} scale={scale} thicknessIn={scale.stockThicknessIn} />
+          <p className="mt-3 text-xs text-muted-foreground">
+            Assembled mock-up generated from the same numbers as the cut list — drag to orbit,
+            scroll to zoom. Panel thickness, wall heights, roof pitch and every window and door
+            sit exactly where the plans place them.
+          </p>
+        </TabsContent>
+
         <TabsContent value="drawings" className="pt-6">
+
           <div className="grid gap-6 lg:grid-cols-2">
             {FACES.map((face) => (
               <div key={face} className="rounded-lg border-2 border-foreground bg-card p-5">
