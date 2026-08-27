@@ -63,6 +63,9 @@ function Landing() {
             <span className="tech-label text-blueprint">plan works</span>
           </div>
           <nav className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/guide">Guide</Link>
+            </Button>
             {!loading &&
               (user ? (
                 <Button asChild size="sm">
