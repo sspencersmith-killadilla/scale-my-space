@@ -79,19 +79,21 @@ function PlanViewer() {
         .limit(1);
       const { data: images } = await supabase
         .from("project_images")
-        .select("storage_path")
+        .select("id, storage_path")
         .eq("project_id", id)
         .order("sort_order", { ascending: true });
-      let photoUrl: string | null = null;
-      if (images?.[0]) {
-        const { data: signed } = await supabase.storage
-          .from("project-media")
-          .createSignedUrl(images[0].storage_path, 3600);
-        photoUrl = signed?.signedUrl ?? null;
-      }
-      return { project, plan: plans?.[0] ?? null, photoUrl };
+      const photos = await Promise.all(
+        (images ?? []).map(async (img) => {
+          const { data: signed } = await supabase.storage
+            .from("project-media")
+            .createSignedUrl(img.storage_path, 3600);
+          return { id: img.id, path: img.storage_path, url: signed?.signedUrl ?? null };
+        }),
+      );
+      return { project, plan: plans?.[0] ?? null, photos };
     },
   });
+
 
   const [scale, setScale] = useState<ScaleSettings | null>(null);
   const [model, setModel] = useState<PlanModel | null>(null);
