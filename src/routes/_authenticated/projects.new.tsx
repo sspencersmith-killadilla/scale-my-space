@@ -98,13 +98,14 @@ function NewProject() {
 
       setStage("Uploading photos…");
       for (let i = 0; i < picks.length; i++) {
-        const pick = picks[i];
+        const pick = picks[i]!;
         const ext = pick.file.name.split(".").pop() ?? "jpg";
         const path = `${user.id}/${project.id}/${Date.now()}-${i}.${ext}`;
         const { error: upErr } = await supabase.storage
           .from("project-media")
           .upload(path, pick.file, { contentType: pick.file.type });
         if (upErr) throw new Error(upErr.message);
+
         const { error: rowErr } = await supabase.from("project_images").insert({
           project_id: project.id,
           user_id: user.id,
