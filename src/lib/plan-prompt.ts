@@ -68,8 +68,8 @@ Rules:
   are the flat panel's real-world face dimensions. Provide realistic quantities.
 - Each part also needs: cutNotes (how to cut it, grain direction, which openings to cut out of it, any bevel or angle in
   degrees), and a location (plain-language where it goes on the finished model).
-- openings place every visible window, door and archway on its face, measured from that face's LEFT edge (xIn) and from
-  the GROUND (yIn) to the bottom of the opening, with the massId of the mass it sits on. Give each opening a short label,
+- openings place every visible window, door and archway on its face, measured from the LEFT edge of ITS OWN MASS's face (xIn) and from
+  the base of that mass (yIn) to the bottom of the opening, with the massId of the mass it sits on. Give each opening a short label,
   a shape (rectangle, round-arch, pointed-arch, horseshoe-arch, circle) with archRiseIn for arched shapes, a recessIn
   (how deep it is set into the wall), a pane grid (paneCols x paneRows, 1x1 for a plain pane, arch or door), and a
   trimNote. For a repeating arcade use one opening with repeatCount = number of bays and repeatSpacingIn = centre-to-centre

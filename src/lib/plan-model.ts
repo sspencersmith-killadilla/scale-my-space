@@ -347,7 +347,9 @@ export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow
               o.face === face && (!part.massId || !o.massId || o.massId === part.massId),
           )
           .map((o) => ({
-            label: o.label || `${o.kind} on ${o.face}`,
+            label: `${o.label || `${o.kind} on ${o.face}`}${
+              o.shape && o.shape !== "rectangle" ? ` (${o.shape.replace("-", " ")})` : ""
+            }`,
             kind: o.kind,
             fromLeftIn: snapInches(o.xIn / d),
             fromBottomIn: snapInches(o.yIn / d),
