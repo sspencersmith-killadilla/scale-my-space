@@ -945,7 +945,84 @@ export function derivedGeometryParts(model: PlanModel): PlanPart[] {
           cutNotes: "Cut two circles of this diameter. They keep the wrapped wall round.",
           notes: "Sand the edges until the wrap sits flush.",
         });
+      } else if (m.kind === "prism") {
+        const sides = Math.max(3, m.sides ?? 6);
+        const faceWidth = (m.diameterIn || m.widthIn) * Math.sin(Math.PI / sides);
+        const bevel = 90 - 180 / sides;
+        out.push({
+          id: `${m.id}-facet`,
+          name: `${m.name} — facet panel`,
+          role: "side-wall",
+          quantity: sides,
+          widthIn: faceWidth,
+          heightIn: m.heightIn,
+          massId: m.id,
+          location: `One of the ${sides} faces of ${m.name}.`,
+          cutNotes: `Cut ${sides} identical panels. Bevel both long edges at ${bevel.toFixed(
+            1,
+          )}° so the faces close into a ${sides}-sided tower. Test-fit dry with tape before gluing.`,
+          notes: `Face width across the flats of a ${formatInches(
+            m.diameterIn || m.widthIn,
+          )} tower.`,
+        });
+        out.push({
+          id: `${m.id}-jig`,
+          name: `${m.name} — alignment ring`,
+          role: "floor",
+          quantity: 2,
+          widthIn: m.diameterIn || m.widthIn,
+          heightIn: m.diameterIn || m.widthIn,
+          massId: m.id,
+          location: `Inside ${m.name}, top and bottom.`,
+          cutNotes: `Cut two ${sides}-sided plates to this size across the corners; they hold the facets square while the glue sets.`,
+          notes: "",
+        });
+      } else if (m.kind === "swept") {
+        const dia = massWidth(m);
+        out.push({
+          id: `${m.id}-blank`,
+          name: `${m.name} — turning/stacking blank`,
+          role: "detail",
+          quantity: 1,
+          widthIn: dia,
+          heightIn: dia,
+          massId: m.id,
+          location: `Forms the shaped profile of ${m.name}.`,
+          cutNotes: `Cut squares of this size and glue them into a stack ${formatInches(
+            massTotalHeight(m),
+          )} tall, then sand or turn down to the printed profile template. If you have no lathe, cut each layer to the diameter shown on the profile page and sand the steps smooth.`,
+          notes: `Largest diameter ${formatInches(dia)}.`,
+        });
+        out.push({
+          id: `${m.id}-template`,
+          name: `${m.name} — profile template`,
+          role: "detail",
+          quantity: 1,
+          widthIn: dia / 2 + 0.5,
+          heightIn: massTotalHeight(m),
+          massId: m.id,
+          location: "Cardstock template, not part of the model.",
+          cutNotes:
+            "Trace the printed half-profile onto card, cut it out, and hold it against the blank as you sand to check the shape.",
+          notes: "",
+        });
+      } else if (m.kind === "extruded") {
+        out.push({
+          id: `${m.id}-run`,
+          name: `${m.name} — moulding run`,
+          role: "trim",
+          quantity: 1,
+          widthIn: m.widthIn,
+          heightIn: Math.max(m.heightIn, 0.5),
+          massId: m.id,
+          location: `Runs along ${m.name}.`,
+          cutNotes:
+            "Cut one long strip of this height, then shape the drawn cross-section along the whole length (sand block, scratch stock, or stacked thin strips). Mitre the corners at 45° after shaping.",
+          notes: `Total run ${formatInches(m.widthIn)}.`,
+        });
       } else {
+        const isArcade = m.kind === "arch-block" && (m.bayCount ?? 0) > 1;
+        const topW = m.kind === "tapered" && m.topWidthIn ? m.topWidthIn : m.widthIn;
         out.push({
           id: `${m.id}-front`,
           name: `${m.name} — front & back panel`,
@@ -955,7 +1032,15 @@ export function derivedGeometryParts(model: PlanModel): PlanPart[] {
           heightIn: m.heightIn,
           massId: m.id,
           location: `Front and back faces of ${m.name}.`,
-          cutNotes: "Cut square, grain running vertically. Cut this mass's openings out before assembly.",
+          cutNotes: isArcade
+            ? `Cut square, grain vertical. Mark out ${m.bayCount} identical bays ${formatInches(
+                m.bayWidthIn || 0,
+              )} wide and cut each ${m.bayShape ?? "round-arch"} opening with a coping saw or scroll saw before assembly — make one card template and reuse it for every bay so they match.`
+            : m.kind === "tapered"
+              ? `Cut as a trapezoid: ${formatInches(m.widthIn)} at the bottom, ${formatInches(
+                  topW,
+                )} at the top. Cut this mass's openings before assembly.`
+              : "Cut square, grain running vertically. Cut this mass's openings out before assembly.",
           notes: m.notes,
         });
         out.push({
@@ -967,14 +1052,19 @@ export function derivedGeometryParts(model: PlanModel): PlanPart[] {
           heightIn: m.heightIn,
           massId: m.id,
           location: `Left and right faces of ${m.name}.`,
-          cutNotes: "Cut square; these sit between the front and back panels.",
+          cutNotes:
+            m.kind === "tapered"
+              ? "Cut square, then bevel the long edges so they meet the sloped front and back."
+              : "Cut square; these sit between the front and back panels.",
           notes: m.notes,
         });
       }
     }
     if (m.top.type === "crenellated" || m.top.type === "parapet") {
-      const perimeter =
-        m.kind === "cylinder" ? Math.PI * m.diameterIn : (m.widthIn + m.depthIn) * 2;
+      const perimeter = isRoundMass(m)
+        ? Math.PI * massWidth(m)
+        : (massWidth(m) + massDepth(m)) * 2;
+
       out.push({
         id: `${m.id}-parapet`,
         name: `${m.name} — ${m.top.type === "crenellated" ? "battlement strip" : "parapet strip"}`,
