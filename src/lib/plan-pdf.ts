@@ -385,65 +385,241 @@ export function buildPlanPdf(
   );
   footer(doc, page);
 
-  /* ---------- Instructions ---------- */
+  /* ---------- Window & door schedule ---------- */
+  if (model.openings.length) {
+    doc.addPage();
+    page += 1;
+    header(doc, "Window & door schedule", subtitle);
+    y = 92;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...GREY);
+    y = wrapped(
+      doc,
+      "All positions are model inches, measured on the flat panel before assembly: from that panel's left edge and up from its bottom edge.",
+      MARGIN,
+      y,
+      contentW,
+      12,
+    ) + 14;
+    const d = resolveDenominator(model, scale);
+    for (const o of model.openings) {
+      if (y > H - 90) {
+        footer(doc, page);
+        doc.addPage();
+        page += 1;
+        header(doc, "Window & door schedule (cont.)", subtitle);
+        y = 92;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(...INK);
+      doc.text(`${o.label || o.kind} — ${o.face} face`, MARGIN, y);
+      y += 13;
+      doc.setFont("courier", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(...BLUE);
+      doc.text(
+        `${formatInches(o.widthIn / d)} × ${formatInches(o.heightIn / d)}  ·  ${formatInches(o.xIn / d)} from left  ·  ${formatInches(o.yIn / d)} up from bottom  ·  ${o.paneCols ?? 1}×${o.paneRows ?? 1} panes`,
+        MARGIN,
+        y,
+      );
+      y += 13;
+      if (o.trimNote) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(...INK);
+        y = wrapped(doc, o.trimNote, MARGIN, y, contentW, 12) + 6;
+      }
+      y += 8;
+    }
+    footer(doc, page);
+  }
+
+  /* ---------- Step-by-step assembly ---------- */
   doc.addPage();
   page += 1;
-  header(doc, "Assembly", subtitle);
+  header(doc, "Step-by-step assembly", subtitle);
   y = 92;
-  doc.setTextColor(...INK);
-  model.assemblySteps.forEach((step, i) => {
-    if (y > H - 90) {
-      footer(doc, page);
-      doc.addPage();
-      page += 1;
-      header(doc, "Assembly (cont.)", subtitle);
-      y = 92;
-    }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(...ORANGE);
-    doc.text(String(i + 1).padStart(2, "0"), MARGIN, y);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...INK);
-    y = wrapped(doc, step, MARGIN + 26, y, contentW - 26, 13) + 10;
-  });
 
-  const sections: Array<[string, string[]]> = [
-    ["Finishing", model.finishingSteps],
-    ["Extra materials", model.extraMaterials],
-    ["Assumptions & estimates", model.assumptions],
-  ];
-  for (const [heading, items] of sections) {
-    if (!items.length) continue;
-    if (y > H - 140) {
+  const ensure = (need: number, heading: string) => {
+    if (y + need > H - 60) {
       footer(doc, page);
       doc.addPage();
       page += 1;
       header(doc, heading, subtitle);
       y = 92;
     }
+  };
+
+  if (model.assemblyStages.length) {
+    model.assemblyStages.forEach((stage, si) => {
+      ensure(70, "Step-by-step assembly (cont.)");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(...ORANGE);
+      doc.text(`STAGE ${si + 1}`, MARGIN, y);
+      doc.setTextColor(...INK);
+      y = wrapped(doc, stage.title, MARGIN + 62, y, contentW - 62, 14) + 4;
+      if (stage.goal) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9.5);
+        doc.setTextColor(...GREY);
+        y = wrapped(doc, stage.goal, MARGIN, y + 6, contentW, 12) + 4;
+      }
+      if (stage.tools.length || stage.parts.length) {
+        doc.setFont("courier", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...BLUE);
+        if (stage.tools.length)
+          y = wrapped(doc, `TOOLS: ${stage.tools.join(", ")}`, MARGIN, y + 6, contentW, 10) + 2;
+        if (stage.parts.length)
+          y = wrapped(doc, `PARTS: ${stage.parts.join(", ")}`, MARGIN, y + 4, contentW, 10) + 2;
+      }
+      y += 10;
+
+      stage.steps.forEach((step, i) => {
+        ensure(60, "Step-by-step assembly (cont.)");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9.5);
+        doc.setTextColor(...ORANGE);
+        doc.text(`${si + 1}.${i + 1}`, MARGIN, y);
+        doc.setTextColor(...INK);
+        y = wrapped(doc, step.instruction, MARGIN + 30, y, contentW - 30, 12);
+        if (step.detail) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(...INK);
+          y = wrapped(doc, step.detail, MARGIN + 30, y + 12, contentW - 30, 12);
+        }
+        if (step.tip) {
+          doc.setFont("helvetica", "italic");
+          doc.setFontSize(8.5);
+          doc.setTextColor(...BLUE);
+          y = wrapped(doc, `Tip: ${step.tip}`, MARGIN + 30, y + 12, contentW - 30, 11);
+        }
+        y += 16;
+      });
+
+      if (stage.check) {
+        ensure(50, "Step-by-step assembly (cont.)");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(...ORANGE);
+        doc.text("CHECK", MARGIN, y);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(...INK);
+        y = wrapped(doc, stage.check, MARGIN + 44, y, contentW - 44, 12) + 18;
+      }
+      doc.setDrawColor(...GREY);
+      doc.setLineWidth(0.4);
+      doc.line(MARGIN, y - 8, W - MARGIN, y - 8);
+      y += 8;
+    });
+  } else {
+    model.assemblySteps.forEach((step, i) => {
+      ensure(40, "Step-by-step assembly (cont.)");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...ORANGE);
+      doc.text(String(i + 1).padStart(2, "0"), MARGIN, y);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...INK);
+      y = wrapped(doc, step, MARGIN + 26, y, contentW - 26, 13) + 10;
+    });
+  }
+  footer(doc, page);
+
+  /* ---------- Detail pieces ---------- */
+  if (model.detailElements.length) {
+    doc.addPage();
+    page += 1;
+    header(doc, "Detail pieces", subtitle);
+    y = 92;
+    for (const el of model.detailElements) {
+      ensure(70, "Detail pieces (cont.)");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(...INK);
+      y = wrapped(doc, el.name, MARGIN, y, contentW, 14) + 4;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      if (el.description) y = wrapped(doc, el.description, MARGIN, y + 8, contentW, 12);
+      doc.setFont("courier", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(...BLUE);
+      if (el.location) y = wrapped(doc, `WHERE: ${el.location}`, MARGIN, y + 12, contentW, 10);
+      if (el.materials) y = wrapped(doc, `MATERIALS: ${el.materials}`, MARGIN, y + 10, contentW, 10);
+      y += 12;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...INK);
+      el.howToMake.forEach((s, i) => {
+        ensure(34, "Detail pieces (cont.)");
+        doc.setTextColor(...ORANGE);
+        doc.text(`${i + 1}.`, MARGIN, y);
+        doc.setTextColor(...INK);
+        y = wrapped(doc, s, MARGIN + 20, y, contentW - 20, 12) + 6;
+      });
+      y += 14;
+    }
+    footer(doc, page);
+  }
+
+  /* ---------- Paint & finish ---------- */
+  if (model.paintPlan.length || model.finishingSteps.length) {
+    doc.addPage();
+    page += 1;
+    header(doc, "Paint & finish", subtitle);
+    y = 92;
+    for (const p of model.paintPlan) {
+      ensure(60, "Paint & finish (cont.)");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...INK);
+      doc.text(p.area, MARGIN, y);
+      y += 13;
+      doc.setFont("courier", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(...BLUE);
+      y = wrapped(doc, `${p.color} — match: ${p.colorMatch}`, MARGIN, y, contentW, 11) + 4;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...INK);
+      if (p.technique) y = wrapped(doc, p.technique, MARGIN, y + 6, contentW, 12);
+      y += 16;
+    }
+    y = bulletSection("Finishing steps", model.finishingSteps, y);
+    footer(doc, page);
+  }
+
+  /* ---------- Glossary & assumptions ---------- */
+  doc.addPage();
+  page += 1;
+  header(doc, "Terms & assumptions", subtitle);
+  y = 92;
+  if (model.glossary.length) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(...INK);
-    doc.text(heading.toUpperCase(), MARGIN, y + 12);
-    y += 28;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    for (const item of items) {
-      if (y > H - 70) {
-        footer(doc, page);
-        doc.addPage();
-        page += 1;
-        header(doc, `${heading} (cont.)`, subtitle);
-        y = 92;
-      }
-      doc.setTextColor(...BLUE);
-      doc.text("•", MARGIN, y);
+    doc.text("PLAIN-ENGLISH GLOSSARY", MARGIN, y);
+    y += 20;
+    for (const g of model.glossary) {
+      ensure(40, "Terms & assumptions (cont.)");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
       doc.setTextColor(...INK);
-      y = wrapped(doc, item, MARGIN + 14, y, contentW - 14, 12) + 6;
+      doc.text(g.term, MARGIN, y);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...INK);
+      y = wrapped(doc, g.definition, MARGIN, y + 12, contentW, 12) + 12;
     }
+    y += 6;
   }
+  y = bulletSection("Assumptions & estimates", model.assumptions, y);
   footer(doc, page);
+
 
   return doc;
 }
