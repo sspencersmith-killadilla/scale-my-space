@@ -54,6 +54,7 @@ export const Route = createFileRoute("/_authenticated/projects/$id")({
 });
 
 const FACES: FaceKey[] = ["front", "right", "back", "left"];
+const MAX_PHOTOS = 8;
 
 function PlanViewer() {
   const { id } = Route.useParams();
@@ -61,6 +62,8 @@ function PlanViewer() {
   const queryClient = useQueryClient();
   const runGenerate = useServerFn(generatePlan);
   const [regenerating, setRegenerating] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["project", id],
