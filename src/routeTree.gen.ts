@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as GuideRouteImport } from './routes/guide'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects.index'
 import { Route as AuthenticatedProjectsIdRouteImport } from './routes/_authenticated/projects.$id'
 import { Route as AuthenticatedProjectsNewRouteImport } from './routes/_authenticated/projects.new'
@@ -28,6 +29,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GuideRoute = GuideRouteImport.update({
+  id: '/guide',
+  path: '/guide',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedProjectsIndexRoute =
@@ -51,6 +57,7 @@ const AuthenticatedProjectsNewRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/guide': typeof GuideRoute
   '/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/projects/new': typeof AuthenticatedProjectsNewRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/guide': typeof GuideRoute
   '/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/projects/new': typeof AuthenticatedProjectsNewRoute
   '/projects': typeof AuthenticatedProjectsIndexRoute
@@ -67,20 +75,23 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/guide': typeof GuideRoute
   '/_authenticated/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/_authenticated/projects/new': typeof AuthenticatedProjectsNewRoute
   '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/projects/$id' | '/projects/new' | '/projects/'
+  fullPaths:
+    '/' | '/auth' | '/guide' | '/projects/$id' | '/projects/new' | '/projects/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/projects/$id' | '/projects/new' | '/projects'
+  to: '/' | '/auth' | '/guide' | '/projects/$id' | '/projects/new' | '/projects'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/guide'
     | '/_authenticated/projects/$id'
     | '/_authenticated/projects/new'
     | '/_authenticated/projects/'
@@ -90,6 +101,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  GuideRoute: typeof GuideRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -113,6 +125,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/guide': {
+      id: '/guide'
+      path: '/guide'
+      fullPath: '/guide'
+      preLoaderRoute: typeof GuideRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/projects/': {
@@ -158,6 +177,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  GuideRoute: GuideRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

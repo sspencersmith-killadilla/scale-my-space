@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Hammer } from "lucide-react";
+import { Plus, Hammer, BookOpen, PlayCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Walkthrough, useWalkthrough } from "@/components/Walkthrough";
 
 export const Route = createFileRoute("/_authenticated/projects/")({
   head: () => ({
