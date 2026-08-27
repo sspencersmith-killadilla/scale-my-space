@@ -132,8 +132,13 @@ function House({ model, scale, thicknessIn }: Props) {
   const overhang = Math.max(model.roof.overhangIn / d, 0);
   const floors = Math.max(1, Math.min(model.stories, 5)) - 1;
 
-  const slopeLen = Math.sqrt((dims.d / 2 + overhang) ** 2 + roofRise ** 2);
-  const slopeAngle = Math.atan2(roofRise, dims.d / 2 + overhang);
+  // Roof slope runs from the ridge down to the eave, then overhangs past it.
+  const runToEave = Math.sqrt((dims.d / 2) ** 2 + roofRise ** 2);
+  const slopeAngle = Math.atan2(roofRise, dims.d / 2);
+  const slopeLen = runToEave + overhang;
+  const halfZ = (slopeLen / 2) * (dims.d / 2 / Math.max(runToEave, 0.001));
+  const halfY = (slopeLen / 2) * (roofRise / Math.max(runToEave, 0.001));
+
 
   return (
     <group position={[0, -dims.h / 2, 0]}>
