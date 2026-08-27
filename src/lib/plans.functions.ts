@@ -144,7 +144,8 @@ export const generatePlan = createServerFn({ method: "POST" })
                   referenceNote: project.reference_note ?? "",
                   photoCount: imageUrls.length,
                   structureNotes,
-                  refineNotes,
+                  ...(refineNotes ? { refineNotes } : {}),
+
                 }),
               },
               ...photoBlocks,
