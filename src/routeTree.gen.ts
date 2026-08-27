@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as GuideRouteImport } from './routes/guide'
+import { Route as DevHarnessRouteImport } from './routes/dev.harness'
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects.index'
 import { Route as AuthenticatedProjectsIdRouteImport } from './routes/_authenticated/projects.$id'
 import { Route as AuthenticatedProjectsNewRouteImport } from './routes/_authenticated/projects.new'
@@ -34,6 +35,11 @@ const AuthRoute = AuthRouteImport.update({
 const GuideRoute = GuideRouteImport.update({
   id: '/guide',
   path: '/guide',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevHarnessRoute = DevHarnessRouteImport.update({
+  id: '/dev/harness',
+  path: '/dev/harness',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedProjectsIndexRoute =
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/guide': typeof GuideRoute
+  '/dev/harness': typeof DevHarnessRoute
   '/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/projects/new': typeof AuthenticatedProjectsNewRoute
   '/projects/': typeof AuthenticatedProjectsIndexRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/guide': typeof GuideRoute
+  '/dev/harness': typeof DevHarnessRoute
   '/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/projects/new': typeof AuthenticatedProjectsNewRoute
   '/projects': typeof AuthenticatedProjectsIndexRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/guide': typeof GuideRoute
+  '/dev/harness': typeof DevHarnessRoute
   '/_authenticated/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/_authenticated/projects/new': typeof AuthenticatedProjectsNewRoute
   '/_authenticated/projects/': typeof AuthenticatedProjectsIndexRoute
@@ -83,15 +92,29 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/auth' | '/guide' | '/projects/$id' | '/projects/new' | '/projects/'
+    | '/'
+    | '/auth'
+    | '/guide'
+    | '/dev/harness'
+    | '/projects/$id'
+    | '/projects/new'
+    | '/projects/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/guide' | '/projects/$id' | '/projects/new' | '/projects'
+  to:
+    | '/'
+    | '/auth'
+    | '/guide'
+    | '/dev/harness'
+    | '/projects/$id'
+    | '/projects/new'
+    | '/projects'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/guide'
+    | '/dev/harness'
     | '/_authenticated/projects/$id'
     | '/_authenticated/projects/new'
     | '/_authenticated/projects/'
@@ -102,6 +125,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   GuideRoute: typeof GuideRoute
+  DevHarnessRoute: typeof DevHarnessRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -132,6 +156,13 @@ declare module '@tanstack/react-router' {
       path: '/guide'
       fullPath: '/guide'
       preLoaderRoute: typeof GuideRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/harness': {
+      id: '/dev/harness'
+      path: '/dev/harness'
+      fullPath: '/dev/harness'
+      preLoaderRoute: typeof DevHarnessRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/projects/': {
@@ -178,6 +209,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   GuideRoute: GuideRoute,
+  DevHarnessRoute: DevHarnessRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
