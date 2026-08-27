@@ -504,12 +504,26 @@ function PlanViewer() {
         ))}
       </div>
 
+      {model.overview && (
+        <section className="mt-6 rounded-lg border border-border bg-card p-5">
+          <h2 className="tech-label text-blueprint">What you are building</h2>
+          <p className="mt-2 text-sm leading-relaxed">{model.overview}</p>
+          <p className="mt-3 font-mono text-xs text-muted-foreground">
+            {model.difficulty} build
+            {model.estimatedHours > 0 ? ` · about ${model.estimatedHours} hours of work` : ""}
+          </p>
+        </section>
+      )}
+
       <Tabs defaultValue="cutlist" className="mt-10">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="cutlist">Cut list</TabsTrigger>
           <TabsTrigger value="drawings">Elevations</TabsTrigger>
           <TabsTrigger value="layout">Cutting layout</TabsTrigger>
-          <TabsTrigger value="build">Assembly</TabsTrigger>
+          <TabsTrigger value="build">Step-by-step</TabsTrigger>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="finish">Paint &amp; finish</TabsTrigger>
+          <TabsTrigger value="basics">Tools &amp; terms</TabsTrigger>
         </TabsList>
 
         <TabsContent value="cutlist" className="pt-6">
@@ -517,22 +531,42 @@ function PlanViewer() {
             <table className="w-full border-collapse text-sm">
               <thead className="bg-secondary">
                 <tr>
-                  {["Part", "Qty", "Length", "Width", "Thickness", "Notes"].map((h) => (
-                    <th key={h} className="tech-label border-b border-border px-4 py-3 text-left">
-                      {h}
-                    </th>
-                  ))}
+                  {["Part", "Qty", "Length", "Width", "Thickness", "Where it goes & how to cut it"].map(
+                    (h) => (
+                      <th key={h} className="tech-label border-b border-border px-4 py-3 text-left">
+                        {h}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody className="font-mono">
                 {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-border last:border-0">
+                  <tr key={r.id} className="border-b border-border align-top last:border-0">
                     <td className="px-4 py-3 font-sans font-medium">{r.name}</td>
                     <td className="px-4 py-3">{r.quantity}</td>
                     <td className="px-4 py-3">{formatInches(r.lengthIn)}</td>
                     <td className="px-4 py-3">{formatInches(r.widthIn)}</td>
                     <td className="px-4 py-3">{formatInches(r.thicknessIn)}</td>
-                    <td className="px-4 py-3 font-sans text-xs text-muted-foreground">{r.notes}</td>
+                    <td className="px-4 py-3 font-sans text-xs text-muted-foreground">
+                      {r.location && <p className="text-foreground">{r.location}</p>}
+                      {r.cutNotes && <p className="mt-1">{r.cutNotes}</p>}
+                      {r.notes && <p className="mt-1">{r.notes}</p>}
+                      {r.openings.length > 0 && (
+                        <div className="mt-2 rounded border border-dashed border-border p-2">
+                          <p className="tech-label text-accent">Cut these openings out</p>
+                          <ul className="mt-1 space-y-1 font-mono">
+                            {r.openings.map((o, i) => (
+                              <li key={i}>
+                                {o.label}: {formatInches(o.widthIn)} × {formatInches(o.heightIn)} —{" "}
+                                {formatInches(o.fromLeftIn)} from the left edge,{" "}
+                                {formatInches(o.fromBottomIn)} up from the bottom
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -548,9 +582,34 @@ function PlanViewer() {
                 <div className="mt-3">
                   <Elevation model={model} scale={scale} face={face} />
                 </div>
+                <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                  {model.openings
+                    .filter((o) => o.face === face)
+                    .map((o, i) => (
+                      <li key={i}>
+                        <span className="font-medium text-foreground">
+                          {o.label || `${o.kind} ${i + 1}`}
+                        </span>
+                        {o.paneCols && o.paneRows && o.kind === "window"
+                          ? ` · ${o.paneCols}×${o.paneRows} panes`
+                          : ""}
+                        {o.trimNote ? ` · ${o.trimNote}` : ""}
+                      </li>
+                    ))}
+                </ul>
               </div>
             ))}
           </div>
+          {model.roof.buildNotes && (
+            <div className="mt-6 rounded-lg border border-border bg-secondary p-5">
+              <h3 className="tech-label text-blueprint">Roof</h3>
+              <p className="mt-2 text-sm">
+                {model.roof.type}
+                {model.roof.pitchNote ? ` · ${model.roof.pitchNote}` : ""}
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">{model.roof.buildNotes}</p>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="layout" className="pt-6">
@@ -563,37 +622,92 @@ function PlanViewer() {
         </TabsContent>
 
         <TabsContent value="build" className="space-y-8 pt-6">
-          <section>
-            <h3 className="text-lg font-bold">Assembly steps</h3>
-            <ol className="mt-4 space-y-3">
-              {model.assemblySteps.map((step, i) => (
-                <li key={i} className="flex gap-4 border-b border-border pb-3 last:border-0">
-                  <span className="tech-label text-accent">{String(i + 1).padStart(2, "0")}</span>
-                  <span className="text-sm">{step}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          {model.finishingSteps.length > 0 && (
-            <section>
-              <h3 className="text-lg font-bold">Finishing</h3>
-              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-                {model.finishingSteps.map((s, i) => (
+          {model.safetyNotes.length > 0 && (
+            <section className="rounded-lg border border-accent/50 bg-secondary p-5">
+              <h3 className="tech-label text-accent">Before you start</h3>
+              <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+                {model.safetyNotes.map((s, i) => (
                   <li key={i}>{s}</li>
                 ))}
               </ul>
             </section>
           )}
 
-          {model.extraMaterials.length > 0 && (
+          {model.assemblyStages.length > 0
+            ? model.assemblyStages.map((stage, si) => (
+                <section key={si} className="rounded-lg border-2 border-foreground bg-card p-6">
+                  <div className="flex flex-wrap items-baseline gap-3">
+                    <span className="tech-label text-accent">
+                      Stage {String(si + 1).padStart(2, "0")}
+                    </span>
+                    <h3 className="text-lg font-bold">{stage.title}</h3>
+                  </div>
+                  {stage.goal && <p className="mt-2 text-sm text-muted-foreground">{stage.goal}</p>}
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {stage.tools.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="tech-label text-blueprint">Tools </span>
+                        {stage.tools.join(", ")}
+                      </p>
+                    )}
+                    {stage.parts.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="tech-label text-blueprint">Parts </span>
+                        {stage.parts.join(", ")}
+                      </p>
+                    )}
+                  </div>
+                  <ol className="mt-5 space-y-5">
+                    {stage.steps.map((step, i) => (
+                      <li key={i} className="flex gap-4 border-b border-border pb-4 last:border-0">
+                        <span className="tech-label shrink-0 text-accent">
+                          {si + 1}.{i + 1}
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium">{step.instruction}</p>
+                          {step.detail && (
+                            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                              {step.detail}
+                            </p>
+                          )}
+                          {step.tip && (
+                            <p className="mt-2 border-l-2 border-accent pl-3 text-xs text-muted-foreground">
+                              Tip: {step.tip}
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                  {stage.check && (
+                    <p className="mt-4 rounded border border-dashed border-border bg-secondary p-3 text-xs text-muted-foreground">
+                      <span className="tech-label text-accent">Check </span>
+                      {stage.check}
+                    </p>
+                  )}
+                </section>
+              ))
+            : model.assemblySteps.length > 0 && (
+                <ol className="space-y-3">
+                  {model.assemblySteps.map((step, i) => (
+                    <li key={i} className="flex gap-4 border-b border-border pb-3 last:border-0">
+                      <span className="tech-label text-accent">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <span className="text-sm">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+
+          {model.assemblyStages.length > 0 && model.assemblySteps.length > 0 && (
             <section>
-              <h3 className="text-lg font-bold">Also gather</h3>
-              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
-                {model.extraMaterials.map((s, i) => (
+              <h3 className="text-lg font-bold">Quick checklist</h3>
+              <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
+                {model.assemblySteps.map((s, i) => (
                   <li key={i}>{s}</li>
                 ))}
-              </ul>
+              </ol>
             </section>
           )}
 
@@ -609,7 +723,120 @@ function PlanViewer() {
             </p>
           </section>
         </TabsContent>
+
+        <TabsContent value="details" className="space-y-6 pt-6">
+          {model.detailElements.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No detail pieces were called out. Redraft with a closer photo to capture trim, porches
+              and chimneys.
+            </p>
+          ) : (
+            model.detailElements.map((el, i) => (
+              <section key={i} className="rounded-lg border-2 border-foreground bg-card p-6">
+                <h3 className="text-lg font-bold">{el.name}</h3>
+                {el.description && <p className="mt-2 text-sm">{el.description}</p>}
+                <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                  {el.location && (
+                    <p>
+                      <span className="tech-label text-blueprint">Where </span>
+                      {el.location}
+                    </p>
+                  )}
+                  {el.materials && (
+                    <p>
+                      <span className="tech-label text-blueprint">Materials </span>
+                      {el.materials}
+                    </p>
+                  )}
+                </div>
+                {el.howToMake.length > 0 && (
+                  <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm">
+                    {el.howToMake.map((s, j) => (
+                      <li key={j}>{s}</li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="finish" className="space-y-8 pt-6">
+          {model.paintPlan.length > 0 && (
+            <section className="overflow-x-auto rounded-lg border-2 border-foreground">
+              <table className="w-full border-collapse text-sm">
+                <thead className="bg-secondary">
+                  <tr>
+                    {["Area", "Colour", "Paint match", "How to paint it"].map((h) => (
+                      <th key={h} className="tech-label border-b border-border px-4 py-3 text-left">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {model.paintPlan.map((p, i) => (
+                    <tr key={i} className="border-b border-border align-top last:border-0">
+                      <td className="px-4 py-3 font-medium">{p.area}</td>
+                      <td className="px-4 py-3">{p.color}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{p.colorMatch}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{p.technique}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          {model.finishingSteps.length > 0 && (
+            <section>
+              <h3 className="text-lg font-bold">Finishing steps</h3>
+              <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+                {model.finishingSteps.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ol>
+            </section>
+          )}
+        </TabsContent>
+
+        <TabsContent value="basics" className="space-y-8 pt-6">
+          <div className="grid gap-6 sm:grid-cols-2">
+            {(
+              [
+                ["Tools", model.toolsNeeded],
+                ["Supplies", [...model.suppliesNeeded, ...model.extraMaterials]],
+              ] as const
+            ).map(([label, items]) =>
+              items.length ? (
+                <section key={label} className="rounded-lg border border-border bg-card p-5">
+                  <h3 className="tech-label text-blueprint">{label}</h3>
+                  <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+                    {items.map((s, i) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null,
+            )}
+          </div>
+
+          {model.glossary.length > 0 && (
+            <section>
+              <h3 className="text-lg font-bold">Plain-English glossary</h3>
+              <dl className="mt-3 space-y-3">
+                {model.glossary.map((g, i) => (
+                  <div key={i} className="border-b border-border pb-3 last:border-0">
+                    <dt className="text-sm font-semibold">{g.term}</dt>
+                    <dd className="mt-1 text-sm text-muted-foreground">{g.definition}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          )}
+        </TabsContent>
       </Tabs>
+
     </main>
   );
 }
