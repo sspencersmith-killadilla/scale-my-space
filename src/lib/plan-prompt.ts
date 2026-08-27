@@ -1,8 +1,47 @@
-/** Prompt + strict JSON schema for photo -> real-world building model extraction. */
+/** Prompts + strict JSON schemas for photo -> real-world building model extraction. */
+
+/* ------------------------------------------------------------------ */
+/* Pass 1: read the structure before measuring anything                */
+/* ------------------------------------------------------------------ */
+
+export const READ_SYSTEM_PROMPT = `You are an architectural surveyor. You are shown photographs of ONE real subject. Your only job in this
+step is to READ what is actually there, before any measuring or plan writing happens.
+
+Do not assume the subject is a house. It may be a castle, fortress, church, tower, barn, shop front, bridge, monument,
+lighthouse, industrial building or an object. Describe what the photographs show, not what buildings usually look like.
+
+Report:
+- subject and style, and the dominant material of each surface.
+- massing: the subject broken into simple VOLUMES. Count them honestly. A fortress wall with round towers is one long
+  block plus one cylinder per tower. A church is a nave block, a chancel block and a tower. Give each volume a kind
+  ("block" or "cylinder"), its rough relative size, and where it sits relative to the whole (left/right, front/back,
+  taller/shorter). Count repeated volumes exactly (e.g. "four round towers, two flanking the gate, one at each end").
+- wall tops: for each volume say whether the top is flat, gabled, hipped, shed, domed, conical, crenellated
+  (battlements with square teeth) or a plain parapet.
+- openings: how many, their shape (rectangle, round arch, pointed arch, horseshoe arch, circle), whether they repeat in
+  an arcade (and how many bays), and roughly where they sit.
+- features: courses, cornices, banding, buttresses, columns, steps, chimneys, balustrades, battlements — anything that
+  is not a plain flat wall.
+- proportions: the subject's overall width : depth : height as ratios, and the height of each volume relative to the tallest.
+- unseen: which faces are not visible in any photo.
+
+Be specific and quantitative with counts. This reading is the ground truth the plan will be built from, so a missed
+tower or a missed arcade cannot be recovered later.`;
+
+export function buildReadPrompt(photoCount: number) {
+  return photoCount > 1
+    ? `Read the structure of the subject in these ${photoCount} photographs (all the SAME subject from different views, labelled "Reference photo 1..${photoCount}"). Combine every view into one consistent structural reading.`
+    : "Read the structure of the subject in this photograph.";
+}
+
 
 export const PLAN_SYSTEM_PROMPT = `You are an architectural measurer and pattern-maker who writes miniature woodworking plans for
-COMPLETE BEGINNERS. You are given photographs of a real building or object. Estimate its REAL-WORLD dimensions in INCHES
-and break it down into flat wooden panels and detail pieces that a hobbyist can cut on a scroll saw or laser and glue together.
+COMPLETE BEGINNERS. You are given photographs of a real building or object, plus a structural reading of those photographs.
+Estimate its REAL-WORLD dimensions in INCHES and break it down into flat wooden panels and detail pieces that a hobbyist
+can cut on a scroll saw or laser and glue together.
+
+The subject is NOT necessarily a house. Never force it into a house shape: no invented gable roof, no invented porch, no
+invented double-hung windows. Reproduce the massing, tops, opening shapes and features described in the structural reading.
 
 The reader has never built anything before and has NO other reference than your plan. They cannot see the photo while
 building. Therefore: describe everything. Never say "as shown in the photo", "as needed", "to taste", or "standard practice".
@@ -11,17 +50,36 @@ Every instruction must be explicit, ordered, and measurable.
 Rules:
 - All dimensions are real-world inches (not model inches, never feet, never metric). A typical 2-story house is ~240 in tall.
 - Use visible human-scale references (door ~80 in tall, story height ~108 in, standard brick course, car, step riser) to calibrate.
-- overall.heightIn is the total height including roof. overall.wallHeightIn is the height to the top of the side walls
-  (equal to heightIn for a flat-roofed subject).
-- parts must be a COMPLETE, buildable panel breakdown: front wall, back wall, two side walls, gable ends, floors between
-  stories, interior partitions where visible, a base, every roof plane, porch decks/posts/railings, chimney, steps, dormers,
-  plus trim and detail pieces. Aim for 12-30 distinct parts on a house-like subject. widthIn/heightIn are the flat panel's
-  real-world face dimensions. Provide realistic quantities.
+- masses is the most important field: one entry per VOLUME in the structural reading, in agreement with it — same count,
+  same kinds, same arrangement. Each mass has a footprint (widthIn x depthIn for a block, diameterIn for a cylinder), a
+  wall heightIn, a footprint centre (xIn across, zIn front-to-back) in inches measured from the centre of the WHOLE
+  subject (negative xIn = left, negative zIn = towards the back), a baseYIn (0 unless it starts higher up), a rotationDeg,
+  and a top treatment. If the reading says four round towers, emit four cylinder masses at four different xIn/zIn.
+  For a cylinder set widthIn = depthIn = diameterIn.
+- top.type is flat, gable, hip, shed, dome, cone, crenellated or parapet. riseIn is the extra height above the wall top
+  (roof rise, dome/cone rise, or parapet/battlement height). For crenellated tops give merlonWidthIn (tooth width),
+  merlonGapIn (gap width) and merlonHeightIn. For gable/shed give ridgeAxis ("x" = ridge runs left-to-right).
+  Set unused numeric fields to 0.
+- overall must be the bounding box of all masses: widthIn/depthIn across every mass, heightIn to the very highest point,
+  wallHeightIn to the top of the main walls.
+- parts must be a COMPLETE, buildable panel breakdown covering EVERY mass and feature: wall panels per mass, tower wraps
+  and discs for cylinders, gable/roof planes, battlement strips, floors, a base, arch backing pieces, steps, plus trim and
+  detail pieces. Give every part a massId matching the mass it belongs to. Aim for 15-35 distinct parts. widthIn/heightIn
+  are the flat panel's real-world face dimensions. Provide realistic quantities.
 - Each part also needs: cutNotes (how to cut it, grain direction, which openings to cut out of it, any bevel or angle in
   degrees), and a location (plain-language where it goes on the finished model).
-- openings place every visible window and door on its face, measured from that face's LEFT edge (xIn) and from the
-  GROUND (yIn) to the bottom of the opening. Give each opening a short label ("first-floor left window"), a pane grid
-  (paneCols x paneRows, use 1x1 for a plain pane or a door), and a trimNote describing casing/sill/shutters and their sizes.
+- openings place every visible window, door and archway on its face, measured from that face's LEFT edge (xIn) and from
+  the GROUND (yIn) to the bottom of the opening, with the massId of the mass it sits on. Give each opening a short label,
+  a shape (rectangle, round-arch, pointed-arch, horseshoe-arch, circle) with archRiseIn for arched shapes, a recessIn
+  (how deep it is set into the wall), a pane grid (paneCols x paneRows, 1x1 for a plain pane, arch or door), and a
+  trimNote. For a repeating arcade use one opening with repeatCount = number of bays and repeatSpacingIn = centre-to-centre
+  pitch instead of listing each bay. On a cylinder mass give angleDeg (0 = facing the front) instead of relying on face.
+- features: every non-panel piece of geometry — crenellations, string courses, cornices, banding, buttresses, columns,
+  balustrades, steps, chimneys. Give type, massId, face, position (xIn/yIn), size, projectionIn (how far it stands out),
+  count and spacingIn for repeats, and a howToMake list.
+- knownDifferences: honestly list where the buildable model simplifies the real subject (omitted carving, simplified
+  tracery, mirrored unseen faces), 3-8 entries.
+
 - detailElements: describe every characterful feature that is not a plain panel (porch, railing, columns, chimney, dormer,
   shutters, gingerbread trim, steps, roof shingles, foundation, chimney cap, window boxes). For each, give a step-by-step
   howToMake using only basic tools and named stock sizes.
@@ -53,6 +111,8 @@ export function buildUserPrompt(input: {
   subjectNotes: string;
   referenceNote: string;
   photoCount?: number;
+  structureNotes?: string;
+  refineNotes?: string;
 }) {
   const count = input.photoCount ?? 1;
   const lines = [
@@ -60,17 +120,51 @@ export function buildUserPrompt(input: {
       ? `Analyze all ${count} reference photographs below. They are ${count} views of ONE subject, labelled "Reference photo 1..${count}". Combine every view into a single consistent set of real-world dimensions.`
       : "Analyze this photograph of one subject and produce the structured plan.",
   ];
+  if (input.structureNotes?.trim())
+    lines.push(
+      `STRUCTURAL READING of these photographs (authoritative — your masses, tops, opening shapes and features must match it exactly; do not reduce it to a simple house):\n${input.structureNotes.trim()}`,
+    );
   if (input.subjectNotes.trim()) lines.push(`Builder notes about the subject: ${input.subjectNotes.trim()}`);
   if (input.referenceNote.trim())
     lines.push(
       `Known real-world reference dimension (calibrate everything to this): ${input.referenceNote.trim()}`,
     );
   else lines.push("No reference dimension was given — calibrate from typical human-scale features and say so in assumptions.");
+  if (input.refineNotes?.trim())
+    lines.push(
+      `CORRECTIONS from a review of the previous attempt — fix every one of these in this version:\n${input.refineNotes.trim()}`,
+    );
   lines.push(
-    "Write for a complete beginner with no woodworking experience who cannot see the photo. Be exhaustive: full panel breakdown, every detail element, stage-by-stage instructions with per-step detail paragraphs, colour plan, tools, supplies, glossary and safety notes.",
+    "Write for a complete beginner with no woodworking experience who cannot see the photo. Be exhaustive: full massing breakdown, every feature, full panel breakdown, every detail element, stage-by-stage instructions with per-step detail paragraphs, colour plan, tools, supplies, glossary and safety notes.",
   );
   return lines.join("\n");
 }
+
+/* ------------------------------------------------------------------ */
+/* Pass 3: review the geometry against the photographs                 */
+/* ------------------------------------------------------------------ */
+
+export const REVIEW_SYSTEM_PROMPT = `You are reviewing a miniature building plan against the photographs it was derived from.
+You are given the photographs and a text summary of the plan's geometry (masses, tops, openings, features, proportions).
+
+Compare them honestly and return:
+- corrections: specific, actionable fixes ("the two round end towers are missing", "the gate arch is a horseshoe arch,
+  not a rectangle", "the wall is roughly 3x as wide as it is tall, the plan has it nearly square"). Only list real
+  mismatches you can see in the photos. Empty array if the geometry is faithful.
+- knownDifferences: simplifications that are acceptable in a buildable wooden model and should simply be disclosed to the builder.
+- verdict: "faithful" if the massing, tops and opening shapes match the photographs, "needs-work" if any correction is structural.`;
+
+export const reviewJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["verdict", "corrections", "knownDifferences"],
+  properties: {
+    verdict: { type: "string", enum: ["faithful", "needs-work"] },
+    corrections: { type: "array", items: { type: "string" } },
+    knownDifferences: { type: "array", items: { type: "string" } },
+  },
+} as const;
+
 
 
 export const planJsonSchema = {
@@ -85,6 +179,10 @@ export const planJsonSchema = {
     "estimatedHours",
     "overall",
     "roof",
+    "masses",
+    "features",
+    "structureNotes",
+    "knownDifferences",
     "parts",
     "openings",
     "detailElements",
@@ -135,6 +233,132 @@ export const planJsonSchema = {
         },
       },
     },
+    structureNotes: {
+      type: "string",
+      description: "Restate the structural reading of the photographs in 3-6 sentences.",
+    },
+    knownDifferences: { type: "array", items: { type: "string" } },
+    masses: {
+      type: "array",
+      description:
+        "Every volume of the subject. One entry per block or cylinder, matching the structural reading's count.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "id",
+          "name",
+          "kind",
+          "widthIn",
+          "depthIn",
+          "diameterIn",
+          "heightIn",
+          "xIn",
+          "zIn",
+          "baseYIn",
+          "rotationDeg",
+          "top",
+          "materialNote",
+          "notes",
+        ],
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          kind: { type: "string", enum: ["block", "cylinder"] },
+          widthIn: { type: "number" },
+          depthIn: { type: "number" },
+          diameterIn: { type: "number", description: "0 for a block." },
+          heightIn: { type: "number", description: "Height to the top of this mass's walls." },
+          xIn: { type: "number", description: "Footprint centre across, from the subject's centre. Negative = left." },
+          zIn: { type: "number", description: "Footprint centre front-to-back. Negative = towards the back." },
+          baseYIn: { type: "number" },
+          rotationDeg: { type: "number" },
+          top: {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "type",
+              "riseIn",
+              "ridgeAxis",
+              "overhangIn",
+              "merlonWidthIn",
+              "merlonGapIn",
+              "merlonHeightIn",
+              "notes",
+            ],
+            properties: {
+              type: {
+                type: "string",
+                enum: ["flat", "gable", "hip", "shed", "dome", "cone", "crenellated", "parapet"],
+              },
+              riseIn: { type: "number" },
+              ridgeAxis: { type: "string", enum: ["x", "z"] },
+              overhangIn: { type: "number" },
+              merlonWidthIn: { type: "number" },
+              merlonGapIn: { type: "number" },
+              merlonHeightIn: { type: "number" },
+              notes: { type: "string" },
+            },
+          },
+          materialNote: { type: "string" },
+          notes: { type: "string" },
+        },
+      },
+    },
+    features: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "id",
+          "name",
+          "type",
+          "massId",
+          "face",
+          "xIn",
+          "yIn",
+          "widthIn",
+          "heightIn",
+          "projectionIn",
+          "count",
+          "spacingIn",
+          "description",
+          "howToMake",
+        ],
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          type: {
+            type: "string",
+            enum: [
+              "crenellation",
+              "string-course",
+              "cornice",
+              "buttress",
+              "banding",
+              "steps",
+              "chimney",
+              "balustrade",
+              "column",
+              "other",
+            ],
+          },
+          massId: { type: "string" },
+          face: { type: "string", enum: ["front", "back", "left", "right"] },
+          xIn: { type: "number" },
+          yIn: { type: "number" },
+          widthIn: { type: "number" },
+          heightIn: { type: "number" },
+          projectionIn: { type: "number" },
+          count: { type: "integer" },
+          spacingIn: { type: "number" },
+          description: { type: "string" },
+          howToMake: { type: "array", items: { type: "string" } },
+        },
+      },
+    },
+
     parts: {
       type: "array",
       items: {
@@ -150,7 +374,9 @@ export const planJsonSchema = {
           "notes",
           "location",
           "cutNotes",
+          "massId",
         ],
+
         properties: {
           id: { type: "string" },
           name: { type: "string" },
@@ -174,7 +400,9 @@ export const planJsonSchema = {
           notes: { type: "string" },
           location: { type: "string" },
           cutNotes: { type: "string" },
+          massId: { type: "string", description: "The id of the mass this part belongs to." },
         },
+
       },
     },
     openings: {
@@ -193,6 +421,13 @@ export const planJsonSchema = {
           "paneCols",
           "paneRows",
           "trimNote",
+          "massId",
+          "shape",
+          "archRiseIn",
+          "recessIn",
+          "repeatCount",
+          "repeatSpacingIn",
+          "angleDeg",
         ],
         properties: {
           face: { type: "string", enum: ["front", "back", "left", "right"] },
@@ -205,7 +440,18 @@ export const planJsonSchema = {
           paneCols: { type: "integer" },
           paneRows: { type: "integer" },
           trimNote: { type: "string" },
+          massId: { type: "string" },
+          shape: {
+            type: "string",
+            enum: ["rectangle", "round-arch", "pointed-arch", "horseshoe-arch", "circle"],
+          },
+          archRiseIn: { type: "number", description: "0 for a rectangle." },
+          recessIn: { type: "number" },
+          repeatCount: { type: "integer", description: "1 for a single opening; number of bays for an arcade." },
+          repeatSpacingIn: { type: "number", description: "0 unless repeatCount > 1." },
+          angleDeg: { type: "number", description: "Cylinder masses only; 0 otherwise." },
         },
+
       },
     },
     detailElements: {
@@ -283,3 +529,65 @@ export const planJsonSchema = {
     extraMaterials: { type: "array", items: { type: "string" } },
   },
 } as const;
+
+/** Plain-text summary of a generated plan's geometry, for the review pass. */
+export function summarizeGeometry(model: {
+  subject: string;
+  style: string;
+  overall: { widthIn: number; depthIn: number; heightIn: number; wallHeightIn: number };
+  masses: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    widthIn: number;
+    depthIn: number;
+    diameterIn: number;
+    heightIn: number;
+    xIn: number;
+    zIn: number;
+    top: { type: string; riseIn: number };
+  }>;
+  openings: Array<{
+    label?: string;
+    kind: string;
+    shape?: string;
+    face: string;
+    widthIn: number;
+    heightIn: number;
+    repeatCount?: number;
+    massId?: string;
+  }>;
+  features: Array<{ name: string; type: string; count: number; massId: string }>;
+}) {
+  const lines: string[] = [
+    `Subject: ${model.subject} (${model.style})`,
+    `Overall bounding box: ${Math.round(model.overall.widthIn)} wide x ${Math.round(
+      model.overall.depthIn,
+    )} deep x ${Math.round(model.overall.heightIn)} high (inches); walls to ${Math.round(
+      model.overall.wallHeightIn,
+    )}.`,
+    `Masses (${model.masses.length}):`,
+    ...model.masses.map(
+      (m) =>
+        `- ${m.name} [${m.id}]: ${m.kind}${
+          m.kind === "cylinder"
+            ? ` diameter ${Math.round(m.diameterIn)}`
+            : ` ${Math.round(m.widthIn)} x ${Math.round(m.depthIn)}`
+        }, wall height ${Math.round(m.heightIn)}, centred at x=${Math.round(m.xIn)} z=${Math.round(
+          m.zIn,
+        )}, top ${m.top.type} rise ${Math.round(m.top.riseIn)}.`,
+    ),
+    `Openings (${model.openings.length} entries):`,
+    ...model.openings.map(
+      (o) =>
+        `- ${o.label || o.kind}: ${o.shape ?? "rectangle"} ${o.kind}, ${Math.round(
+          o.widthIn,
+        )} x ${Math.round(o.heightIn)} on the ${o.face} of ${o.massId || "main mass"}${
+          (o.repeatCount ?? 1) > 1 ? `, repeated ${o.repeatCount} times` : ""
+        }.`,
+    ),
+    `Features (${model.features.length}):`,
+    ...model.features.map((f) => `- ${f.name}: ${f.type} x${f.count} on ${f.massId}.`),
+  ];
+  return lines.join("\n");
+}

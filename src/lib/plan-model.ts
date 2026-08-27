@@ -29,9 +29,103 @@ export interface PlanPart {
   location?: string;
   /** How to cut it: grain, bevels, which openings come out of it. */
   cutNotes?: string;
+  /** Which mass (volume) of the subject this part belongs to. */
+  massId?: string;
 }
 
 export type FaceKey = "front" | "back" | "left" | "right";
+
+export type MassKind = "block" | "cylinder";
+
+export type TopTreatment =
+  | "flat"
+  | "gable"
+  | "hip"
+  | "shed"
+  | "dome"
+  | "cone"
+  | "crenellated"
+  | "parapet";
+
+export interface PlanMassTop {
+  type: TopTreatment;
+  /** Extra height above the mass's wall height (roof rise / parapet height). */
+  riseIn: number;
+  /** For gable/shed roofs: which axis the ridge runs along. */
+  ridgeAxis: "x" | "z";
+  overhangIn: number;
+  /** Crenellation: merlon (tooth) width, gap between teeth, tooth height. */
+  merlonWidthIn: number;
+  merlonGapIn: number;
+  merlonHeightIn: number;
+  notes: string;
+}
+
+/**
+ * A single volume of the subject. Real subjects are several masses (a long wall
+ * block, round towers, a recessed gate) — never one box.
+ */
+export interface PlanMass {
+  id: string;
+  name: string;
+  kind: MassKind;
+  /** Block footprint. For a cylinder these mirror diameterIn. */
+  widthIn: number;
+  depthIn: number;
+  /** Cylinder footprint diameter. */
+  diameterIn: number;
+  /** Height to the top of the walls, before the top treatment. */
+  heightIn: number;
+  /** Footprint centre, in inches, relative to the whole subject's centre. */
+  xIn: number;
+  zIn: number;
+  /** Height of the mass's base above the ground plane (0 for most). */
+  baseYIn: number;
+  rotationDeg: number;
+  top: PlanMassTop;
+  materialNote: string;
+  notes: string;
+}
+
+export type FeatureType =
+  | "crenellation"
+  | "string-course"
+  | "cornice"
+  | "buttress"
+  | "banding"
+  | "steps"
+  | "chimney"
+  | "balustrade"
+  | "column"
+  | "other";
+
+/** Geometry that is not a plain panel: courses, buttresses, steps, parapets. */
+export interface PlanFeature {
+  id: string;
+  name: string;
+  type: FeatureType;
+  massId: string;
+  face: FaceKey;
+  /** Real-world placement on that face/mass, in inches. */
+  xIn: number;
+  yIn: number;
+  widthIn: number;
+  heightIn: number;
+  /** How far it stands out from (or sinks into) the wall. */
+  projectionIn: number;
+  /** Repeated features (courses of teeth, columns): how many and their pitch. */
+  count: number;
+  spacingIn: number;
+  description: string;
+  howToMake: string[];
+}
+
+export type OpeningShape =
+  | "rectangle"
+  | "round-arch"
+  | "pointed-arch"
+  | "horseshoe-arch"
+  | "circle";
 
 export interface PlanOpening {
   face: FaceKey;
@@ -46,7 +140,20 @@ export interface PlanOpening {
   paneCols?: number;
   paneRows?: number;
   trimNote?: string;
+  /** Which mass the opening sits on (falls back to the largest block). */
+  massId?: string;
+  shape?: OpeningShape;
+  /** Height of the arch above the springing line, for arched shapes. */
+  archRiseIn?: number;
+  /** How deep the opening is recessed into the wall. */
+  recessIn?: number;
+  /** Arcades: repeat this opening N times at this pitch along the face. */
+  repeatCount?: number;
+  repeatSpacingIn?: number;
+  /** Cylinder masses: position around the tower, 0 = facing front. */
+  angleDeg?: number;
 }
+
 
 export interface PlanDetailElement {
   name: string;
@@ -92,6 +199,13 @@ export interface PlanModel {
   estimatedHours: number;
   overall: { widthIn: number; depthIn: number; heightIn: number; wallHeightIn: number };
   roof: { type: string; pitchNote: string; overhangIn: number; buildNotes: string };
+  /** The subject broken into volumes. Drives the 3D preview and elevations. */
+  masses: PlanMass[];
+  features: PlanFeature[];
+  /** Plain-language structural reading of the photos (pass 1 of generation). */
+  structureNotes: string;
+  /** Honest list of ways the model differs from the photographs. */
+  knownDifferences: string[];
   parts: PlanPart[];
   openings: PlanOpening[];
   detailElements: PlanDetailElement[];
@@ -340,6 +454,10 @@ export function emptyPlanModel(): PlanModel {
     estimatedHours: 0,
     overall: { widthIn: 0, depthIn: 0, heightIn: 0, wallHeightIn: 0 },
     roof: { type: "gable", pitchNote: "", overhangIn: 0, buildNotes: "" },
+    masses: [],
+    features: [],
+    structureNotes: "",
+    knownDifferences: [],
     parts: [],
     openings: [],
     detailElements: [],
@@ -389,6 +507,89 @@ export function normalizePlanModel(raw: unknown): PlanModel {
       overhangIn: num(roof['overhangIn'], 0),
       buildNotes: str(roof['buildNotes']),
     },
+    masses: arr(r['masses']).map((m, i) => {
+      const o = obj(m);
+      const kind: MassKind = str(o['kind'], "block") === "cylinder" ? "cylinder" : "block";
+      const top = obj(o['top']);
+      const topType = str(top['type'], "flat") as TopTreatment;
+      const diameterIn = num(o['diameterIn'], num(o['widthIn'], 48));
+      return {
+        id: str(o['id'], `mass-${i + 1}`),
+        name: str(o['name'], `Mass ${i + 1}`),
+        kind,
+        widthIn: kind === "cylinder" ? diameterIn : num(o['widthIn'], 96),
+        depthIn: kind === "cylinder" ? diameterIn : num(o['depthIn'], 96),
+        diameterIn,
+        heightIn: num(o['heightIn'], 96),
+        xIn: num(o['xIn']),
+        zIn: num(o['zIn']),
+        baseYIn: num(o['baseYIn']),
+        rotationDeg: num(o['rotationDeg']),
+        top: {
+          type: (
+            [
+              "flat",
+              "gable",
+              "hip",
+              "shed",
+              "dome",
+              "cone",
+              "crenellated",
+              "parapet",
+            ] as string[]
+          ).includes(topType)
+            ? topType
+            : "flat",
+          riseIn: num(top['riseIn']),
+          ridgeAxis: str(top['ridgeAxis'], "x") === "z" ? ("z" as const) : ("x" as const),
+          overhangIn: num(top['overhangIn']),
+          merlonWidthIn: num(top['merlonWidthIn']),
+          merlonGapIn: num(top['merlonGapIn']),
+          merlonHeightIn: num(top['merlonHeightIn']),
+          notes: str(top['notes']),
+        },
+        materialNote: str(o['materialNote']),
+        notes: str(o['notes']),
+      };
+    }),
+    features: arr(r['features']).map((f, i) => {
+      const o = obj(f);
+      const type = str(o['type'], "other") as FeatureType;
+      const face = str(o['face'], "front") as FaceKey;
+      return {
+        id: str(o['id'], `feature-${i + 1}`),
+        name: str(o['name'], `Feature ${i + 1}`),
+        type: (
+          [
+            "crenellation",
+            "string-course",
+            "cornice",
+            "buttress",
+            "banding",
+            "steps",
+            "chimney",
+            "balustrade",
+            "column",
+            "other",
+          ] as string[]
+        ).includes(type)
+          ? type
+          : "other",
+        massId: str(o['massId']),
+        face: (["front", "back", "left", "right"] as string[]).includes(face) ? face : "front",
+        xIn: num(o['xIn']),
+        yIn: num(o['yIn']),
+        widthIn: num(o['widthIn']),
+        heightIn: num(o['heightIn']),
+        projectionIn: num(o['projectionIn']),
+        count: Math.max(1, Math.round(num(o['count'], 1))),
+        spacingIn: num(o['spacingIn']),
+        description: str(o['description']),
+        howToMake: strs(o['howToMake']),
+      };
+    }),
+    structureNotes: str(r['structureNotes']),
+    knownDifferences: strs(r['knownDifferences']),
     parts: arr(r['parts']).map((p, i) => {
       const o = obj(p);
       return {
@@ -401,11 +602,13 @@ export function normalizePlanModel(raw: unknown): PlanModel {
         notes: str(o['notes']),
         location: str(o['location']),
         cutNotes: str(o['cutNotes']),
+        massId: str(o['massId']),
       };
     }),
     openings: arr(r['openings']).map((p) => {
       const o = obj(p);
       const face = str(o['face'], "front") as FaceKey;
+      const shape = str(o['shape'], "rectangle") as OpeningShape;
       return {
         face: (["front", "back", "left", "right"] as string[]).includes(face) ? face : "front",
         kind: str(o['kind'], "window") === "door" ? ("door" as const) : ("window" as const),
@@ -417,8 +620,20 @@ export function normalizePlanModel(raw: unknown): PlanModel {
         paneCols: Math.max(1, Math.round(num(o['paneCols'], 1))),
         paneRows: Math.max(1, Math.round(num(o['paneRows'], 1))),
         trimNote: str(o['trimNote']),
+        massId: str(o['massId']),
+        shape: (
+          ["rectangle", "round-arch", "pointed-arch", "horseshoe-arch", "circle"] as string[]
+        ).includes(shape)
+          ? shape
+          : "rectangle",
+        archRiseIn: num(o['archRiseIn']),
+        recessIn: num(o['recessIn']),
+        repeatCount: Math.max(1, Math.round(num(o['repeatCount'], 1))),
+        repeatSpacingIn: num(o['repeatSpacingIn']),
+        angleDeg: num(o['angleDeg']),
       };
     }),
+
     detailElements: arr(r['detailElements']).map((p) => {
       const o = obj(p);
       return {
@@ -471,3 +686,178 @@ export function normalizePlanModel(raw: unknown): PlanModel {
   };
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Geometry helpers                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Masses for rendering. Legacy plans (and any plan where the model skipped the
+ * massing pass) fall back to a single block derived from `overall`, so old
+ * projects keep working.
+ */
+export function ensureMasses(model: PlanModel): PlanMass[] {
+  const real = model.masses.filter((m) => m.heightIn > 0 && (m.widthIn > 0 || m.diameterIn > 0));
+  if (real.length) return real;
+  const { widthIn, depthIn, heightIn, wallHeightIn } = model.overall;
+  const wall = Math.min(wallHeightIn || heightIn, heightIn);
+  const rise = Math.max(heightIn - wall, 0);
+  return [
+    {
+      id: "mass-main",
+      name: model.subject || "Main volume",
+      kind: "block",
+      widthIn,
+      depthIn,
+      diameterIn: Math.max(widthIn, depthIn),
+      heightIn: wall,
+      xIn: 0,
+      zIn: 0,
+      baseYIn: 0,
+      rotationDeg: 0,
+      top: {
+        type: rise > wall * 0.04 ? "gable" : "flat",
+        riseIn: rise,
+        ridgeAxis: "x",
+        overhangIn: model.roof.overhangIn,
+        merlonWidthIn: 0,
+        merlonGapIn: 0,
+        merlonHeightIn: 0,
+        notes: model.roof.buildNotes,
+      },
+      materialNote: "",
+      notes: model.roof.pitchNote,
+    },
+  ];
+}
+
+/** Bounding box of all masses, in real-world inches. */
+export function massBounds(masses: PlanMass[]) {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  let maxY = 0;
+  for (const m of masses) {
+    const w = m.kind === "cylinder" ? m.diameterIn : m.widthIn;
+    const dp = m.kind === "cylinder" ? m.diameterIn : m.depthIn;
+    minX = Math.min(minX, m.xIn - w / 2);
+    maxX = Math.max(maxX, m.xIn + w / 2);
+    minZ = Math.min(minZ, m.zIn - dp / 2);
+    maxZ = Math.max(maxZ, m.zIn + dp / 2);
+    maxY = Math.max(maxY, m.baseYIn + m.heightIn + Math.max(m.top.riseIn, 0));
+  }
+  if (!Number.isFinite(minX)) return { minX: 0, maxX: 0, minZ: 0, maxZ: 0, maxY: 0, widthIn: 0, depthIn: 0 };
+  return { minX, maxX, minZ, maxZ, maxY, widthIn: maxX - minX, depthIn: maxZ - minZ };
+}
+
+/** The mass an opening belongs to, falling back to the largest one. */
+export function openingMass(model: PlanModel, o: PlanOpening): PlanMass {
+  const masses = ensureMasses(model);
+  const found = o.massId ? masses.find((m) => m.id === o.massId) : undefined;
+  if (found) return found;
+  return masses.reduce((a, b) => (b.widthIn * b.heightIn > a.widthIn * a.heightIn ? b : a), masses[0]!);
+}
+
+/** Expand arcade repeats into individual openings for drawing and counting. */
+export function expandOpenings(openings: PlanOpening[]): PlanOpening[] {
+  const out: PlanOpening[] = [];
+  for (const o of openings) {
+    const count = Math.max(1, Math.round(o.repeatCount ?? 1));
+    const pitch = o.repeatSpacingIn && o.repeatSpacingIn > 0 ? o.repeatSpacingIn : o.widthIn * 1.6;
+    for (let i = 0; i < count; i++) {
+      out.push(i === 0 ? o : { ...o, xIn: o.xIn + pitch * i, repeatCount: 1 });
+    }
+  }
+  return out;
+}
+
+/**
+ * Extra cut-list rows implied by the geometry when the model didn't list parts
+ * for a mass: tower wraps, cylinder discs, crenellation strips.
+ */
+export function derivedGeometryParts(model: PlanModel): PlanPart[] {
+  const masses = ensureMasses(model);
+  if (!model.masses.length) return [];
+  const covered = new Set(model.parts.map((p) => p.massId).filter(Boolean) as string[]);
+  const out: PlanPart[] = [];
+  for (const m of masses) {
+    if (!covered.has(m.id)) {
+      if (m.kind === "cylinder") {
+        const circumference = Math.PI * m.diameterIn;
+        out.push({
+          id: `${m.id}-wrap`,
+          name: `${m.name} — wall wrap`,
+          role: "side-wall",
+          quantity: 1,
+          widthIn: circumference,
+          heightIn: m.heightIn,
+          massId: m.id,
+          location: `Wraps around ${m.name}.`,
+          cutNotes:
+            "Cut one long rectangle. Score the inside face every 1/4 in across the grain (or soak thin ply) so it bends into a cylinder, then glue around the top and bottom discs.",
+          notes: `Length = circumference of a ${formatInches(m.diameterIn)} diameter tower.`,
+        });
+        out.push({
+          id: `${m.id}-disc`,
+          name: `${m.name} — top & bottom disc`,
+          role: "floor",
+          quantity: 2,
+          widthIn: m.diameterIn,
+          heightIn: m.diameterIn,
+          massId: m.id,
+          location: `Inside ${m.name}, at the base and under the top.`,
+          cutNotes: "Cut two circles of this diameter. They keep the wrapped wall round.",
+          notes: "Sand the edges until the wrap sits flush.",
+        });
+      } else {
+        out.push({
+          id: `${m.id}-front`,
+          name: `${m.name} — front & back panel`,
+          role: "front-wall",
+          quantity: 2,
+          widthIn: m.widthIn,
+          heightIn: m.heightIn,
+          massId: m.id,
+          location: `Front and back faces of ${m.name}.`,
+          cutNotes: "Cut square, grain running vertically. Cut this mass's openings out before assembly.",
+          notes: m.notes,
+        });
+        out.push({
+          id: `${m.id}-side`,
+          name: `${m.name} — side panel`,
+          role: "side-wall",
+          quantity: 2,
+          widthIn: m.depthIn,
+          heightIn: m.heightIn,
+          massId: m.id,
+          location: `Left and right faces of ${m.name}.`,
+          cutNotes: "Cut square; these sit between the front and back panels.",
+          notes: m.notes,
+        });
+      }
+    }
+    if (m.top.type === "crenellated" || m.top.type === "parapet") {
+      const perimeter =
+        m.kind === "cylinder" ? Math.PI * m.diameterIn : (m.widthIn + m.depthIn) * 2;
+      out.push({
+        id: `${m.id}-parapet`,
+        name: `${m.name} — ${m.top.type === "crenellated" ? "battlement strip" : "parapet strip"}`,
+        role: "trim",
+        quantity: 1,
+        widthIn: perimeter,
+        heightIn: Math.max(m.top.merlonHeightIn || m.top.riseIn, 1),
+        massId: m.id,
+        location: `Stands above the wall top of ${m.name}.`,
+        cutNotes:
+          m.top.type === "crenellated"
+            ? `Cut one long strip, then notch the top edge: ${formatInches(
+                m.top.merlonWidthIn || 4,
+              )} tooth, ${formatInches(m.top.merlonGapIn || 3)} gap, repeated the whole length. Cut the notches before you cut the strip into wall lengths.`
+            : "Cut one long strip and mitre it at the corners.",
+        notes: `Total run around the mass: ${formatInches(perimeter)}.`,
+      });
+    }
+  }
+  return out;
+}
