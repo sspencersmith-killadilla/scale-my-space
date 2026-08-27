@@ -1,5 +1,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
+import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
+
 import { OrbitControls, Environment, Lightformer, ContactShadows } from "@react-three/drei";
 import {
   resolveDenominator,
