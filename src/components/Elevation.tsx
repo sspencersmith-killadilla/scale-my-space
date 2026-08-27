@@ -92,6 +92,8 @@ export function Elevation({ model, scale, face, width = 420 }: Props) {
         const rawX = (o.xIn / d) * px;
         const ox = flip ? x0 + w * px - rawX - ow : x0 + rawX;
         const oy = y0 + drawH - (o.yIn / d) * px - oh;
+        const cols = Math.max(1, o.paneCols ?? 1);
+        const linesRows = Math.max(1, o.paneRows ?? 1);
         return (
           <g key={i}>
             <rect
@@ -103,18 +105,48 @@ export function Elevation({ model, scale, face, width = 420 }: Props) {
               stroke="var(--foreground)"
               strokeWidth="1.1"
             />
-            {o.kind === "window" && (
-              <>
-                <line x1={ox + ow / 2} y1={oy} x2={ox + ow / 2} y2={oy + oh} stroke="var(--blueprint)" strokeWidth="0.8" />
-                <line x1={ox} y1={oy + oh / 2} x2={ox + ow} y2={oy + oh / 2} stroke="var(--blueprint)" strokeWidth="0.8" />
-              </>
-            )}
+            {o.kind === "window" &&
+              Array.from({ length: cols - 1 }, (_, c) => (
+                <line
+                  key={`c${c}`}
+                  x1={ox + (ow * (c + 1)) / cols}
+                  y1={oy}
+                  x2={ox + (ow * (c + 1)) / cols}
+                  y2={oy + oh}
+                  stroke="var(--blueprint)"
+                  strokeWidth="0.8"
+                />
+              ))}
+            {o.kind === "window" &&
+              Array.from({ length: linesRows - 1 }, (_, rw) => (
+                <line
+                  key={`r${rw}`}
+                  x1={ox}
+                  y1={oy + (oh * (rw + 1)) / linesRows}
+                  x2={ox + ow}
+                  y2={oy + (oh * (rw + 1)) / linesRows}
+                  stroke="var(--blueprint)"
+                  strokeWidth="0.8"
+                />
+              ))}
             {o.kind === "door" && (
               <circle cx={ox + ow * 0.82} cy={oy + oh * 0.5} r="1.8" fill="var(--accent)" />
+            )}
+            {ow > 26 && (
+              <text
+                x={ox + ow / 2}
+                y={oy - 3}
+                textAnchor="middle"
+                fill="var(--muted-foreground)"
+                style={{ font: "400 7.5px var(--font-mono)" }}
+              >
+                {formatInches(o.widthIn / d)}×{formatInches(o.heightIn / d)}
+              </text>
             )}
           </g>
         );
       })}
+
 
       {/* width dimension */}
       <g stroke="var(--accent)" strokeWidth="1">
