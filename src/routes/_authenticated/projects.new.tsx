@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { generatePlan } from "@/lib/plans.functions";
+import type { DetailLevel } from "@/lib/plan-prompt";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ function NewProject() {
   const [targetHeight, setTargetHeight] = useState("18");
   const [thickness, setThickness] = useState(0.25);
   const [material, setMaterial] = useState<string>(MATERIAL_OPTIONS[0]);
+  const [detailLevel, setDetailLevel] = useState<DetailLevel>("standard");
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
 
@@ -116,7 +118,7 @@ function NewProject() {
       }
 
       setStage("Measuring the subject with AI…");
-      await runGenerate({ data: { projectId: project.id } });
+      await runGenerate({ data: { projectId: project.id, detailLevel } });
 
       toast.success("Plan drafted.");
       navigate({ to: "/projects/$id", params: { id: project.id } });
