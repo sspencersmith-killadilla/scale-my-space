@@ -244,7 +244,7 @@ export function PlanPreview3D({ model, scale, thicknessIn }: Props) {
 
   return (
     <div className="h-[460px] overflow-hidden rounded-md border border-border bg-card">
-      <Canvas shadows dpr={[1, 2]} camera={{ position: [span * 1.5, span * 1.1, span * 1.9], fov: 42 }}>
+      <Canvas shadows dpr={[1, 2]} camera={{ position: [span * 1.05, span * 0.8, span * 1.35], fov: 42 }}>
         <color attach="background" args={["#f2ece0"]} />
         <ambientLight intensity={0.55} />
         <directionalLight
