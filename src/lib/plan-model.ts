@@ -205,7 +205,7 @@ export function formatInches(value: number): string {
   const rounded = Math.round(value * SNAP) / SNAP;
   const whole = Math.floor(rounded + 1e-9);
   const rem = rounded - whole;
-  let best = FRACTIONS[0];
+  let best: [number, string] = [0, ""];
   for (const f of FRACTIONS) {
     if (Math.abs(f[0] - rem) < Math.abs(best[0] - rem)) best = f;
   }
