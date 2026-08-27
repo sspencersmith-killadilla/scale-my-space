@@ -27,6 +27,7 @@ import {
   SCALE_PRESETS,
   THICKNESS_OPTIONS,
   buildCutList,
+  ensureMasses,
   formatFeetInches,
   formatInches,
   modelOverall,
@@ -127,6 +128,8 @@ function PlanViewer() {
     () => (model && scale ? modelOverall(model, scale) : null),
     [model, scale],
   );
+  const masses = useMemo(() => (model ? ensureMasses(model) : []), [model]);
+  const denominator = overall?.denominator ?? 1;
 
   async function persistScale(next: ScaleSettings) {
     setScale(next);
