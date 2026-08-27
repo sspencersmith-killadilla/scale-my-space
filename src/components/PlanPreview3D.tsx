@@ -7,6 +7,9 @@ import {
   ensureMasses,
   expandOpenings,
   massBounds,
+  massDepth,
+  massWidth,
+  isRoundMass,
   resolveDenominator,
   type FaceKey,
   type PlanFeature,
@@ -199,8 +202,8 @@ function Crenellation({ mass, d, t }: { mass: PlanMass; d: number; t: number }) 
     const th = Math.max((mass.top.merlonHeightIn || mass.top.riseIn || 10) / d, t);
     const out: Array<{ pos: [number, number, number]; size: [number, number, number] }> = [];
 
-    if (mass.kind === "cylinder") {
-      const r = mass.diameterIn / d / 2;
+    if (isRoundMass(mass) || mass.kind === "prism") {
+      const r = massWidth(mass) / d / 2;
       const pitch = tooth + gap;
       const count = Math.max(4, Math.round((Math.PI * 2 * r) / pitch));
       for (let i = 0; i < count; i++) {
@@ -213,8 +216,8 @@ function Crenellation({ mass, d, t }: { mass: PlanMass; d: number; t: number }) 
       return { out, rotate: true, th };
     }
 
-    const w = mass.widthIn / d;
-    const dp = mass.depthIn / d;
+    const w = massWidth(mass) / d;
+    const dp = massDepth(mass) / d;
     const run = (length: number) => {
       const pitch = tooth + gap;
       const count = Math.max(2, Math.floor(length / pitch));
@@ -705,8 +708,8 @@ function Features({
       {features.map((f) => {
         const mass = masses.find((m) => m.id === f.massId) ?? masses[0];
         if (!mass || f.type === "crenellation") return null;
-        const w = mass.kind === "cylinder" ? mass.diameterIn / d : mass.widthIn / d;
-        const dp = mass.kind === "cylinder" ? mass.diameterIn / d : mass.depthIn / d;
+        const w = massWidth(mass) / d;
+        const dp = massDepth(mass) / d;
         const y = f.yIn / d;
         const proj = Math.max(f.projectionIn / d, t * 0.4);
         const hgt = Math.max(f.heightIn / d, t * 0.6);
@@ -716,7 +719,7 @@ function Features({
         if (f.type === "string-course" || f.type === "banding" || f.type === "cornice") {
           return (
             <group key={f.id} position={[cx, y + mass.baseYIn / d, cz]}>
-              {mass.kind === "cylinder" ? (
+              {isRoundMass(mass) ? (
                 <mesh castShadow>
                   <cylinderGeometry args={[w / 2 + proj, w / 2 + proj, hgt, 40, 1, true]} />
                   <meshStandardMaterial color={TRIM} roughness={0.8} side={THREE.DoubleSide} />
@@ -821,11 +824,22 @@ function Subject({ model, scale, thicknessIn }: Props) {
           originX,
           originZ,
         };
-        return m.kind === "cylinder" ? (
-          <CylinderMass key={m.id} {...props} />
-        ) : (
-          <BlockMass key={m.id} {...props} />
-        );
+        switch (m.kind) {
+          case "cylinder":
+            return <CylinderMass key={m.id} {...props} />;
+          case "tapered":
+            return <TaperedMass key={m.id} {...props} />;
+          case "prism":
+            return <PrismMass key={m.id} {...props} />;
+          case "swept":
+            return <SweptMass key={m.id} {...props} />;
+          case "extruded":
+            return <ExtrudedMass key={m.id} {...props} />;
+          case "arch-block":
+            return <ArchBlockMass key={m.id} {...props} />;
+          default:
+            return <BlockMass key={m.id} {...props} />;
+        }
       })}
 
       <Features
