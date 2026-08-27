@@ -521,6 +521,8 @@ function PlanViewer() {
         <TabsList className="flex-wrap">
           <TabsTrigger value="cutlist">Cut list</TabsTrigger>
           <TabsTrigger value="preview3d">3D preview</TabsTrigger>
+          <TabsTrigger value="structure">Structure</TabsTrigger>
+
 
           <TabsTrigger value="drawings">Elevations</TabsTrigger>
           <TabsTrigger value="layout">Cutting layout</TabsTrigger>
