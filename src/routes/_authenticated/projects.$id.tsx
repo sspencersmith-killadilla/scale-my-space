@@ -313,18 +313,22 @@ function PlanViewer() {
 
   if (!model || !scale || !overall) {
     return (
-      <div className="mx-auto max-w-6xl px-6 py-16 text-center">
-        <h1 className="text-2xl font-bold">No plan drafted yet</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The AI measurement never finished for this project.
-        </p>
-        <Button className="mt-6" onClick={regenerate} disabled={regenerating}>
-          {regenerating ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-          Draft the plan
-        </Button>
-      </div>
+      <main className="mx-auto max-w-6xl px-6 py-16">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">No plan drafted yet</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Add every view you have, then draft the plan from the full set.
+          </p>
+          <Button className="mt-6" onClick={regenerate} disabled={regenerating}>
+            {regenerating ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            Draft the plan
+          </Button>
+        </div>
+        {photoPanel}
+      </main>
     );
   }
+
 
   const sqft = sheetAreaSqIn(rows) / 144;
 
