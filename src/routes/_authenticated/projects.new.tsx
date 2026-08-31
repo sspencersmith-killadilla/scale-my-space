@@ -118,7 +118,8 @@ function NewProject() {
       }
 
       setStage("Measuring the subject with AI…");
-      await runGenerate({ data: { projectId: project.id, detailLevel } });
+      await generate({ projectId: project.id, detailLevel });
+
 
       toast.success("Plan drafted.");
       navigate({ to: "/projects/$id", params: { id: project.id } });
