@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { detailMass, draftPlan, reviewPlan } from "@/lib/plans.functions";
+import { detailMass, draftPlan, redraftPlan, reviewPlan } from "@/lib/plans.functions";
 import type { DetailLevel } from "@/lib/plan-prompt";
 
 /**
