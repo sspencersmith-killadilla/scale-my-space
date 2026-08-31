@@ -372,7 +372,8 @@ function PlanViewer() {
             ) : (
               <RefreshCw className="mr-2 size-4" />
             )}
-            Redraft
+            {regenerating && aiStage ? aiStage : "Redraft"}
+
           </Button>
           <Button size="sm" onClick={downloadPdf}>
             <Download className="mr-2 size-4" /> PDF pack
