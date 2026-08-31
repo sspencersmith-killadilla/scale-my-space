@@ -13,6 +13,7 @@ import type { DetailLevel } from "@/lib/plan-prompt";
 export function usePlanGeneration() {
   const runDraft = useServerFn(draftPlan);
   const runReview = useServerFn(reviewPlan);
+  const runRedraft = useServerFn(redraftPlan);
   const runDetail = useServerFn(detailMass);
   const [stage, setStage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,9 +38,21 @@ export function usePlanGeneration() {
             data: { projectId: input.projectId, planId: draft.planId },
           });
           targets = review.targets;
+          if (review.needsWork) {
+            setStage("Correcting the massing…");
+            const redraft = await runRedraft({
+              data: {
+                projectId: input.projectId,
+                planId: draft.planId,
+                corrections: review.corrections,
+              },
+            });
+            targets = redraft.targets;
+          }
         } catch (e) {
           console.error("[plan] review stage failed, keeping the draft", e);
         }
+
 
         for (let i = 0; i < targets.length; i++) {
           setStage(`Adding shape detail (${i + 1} of ${targets.length})…`);
