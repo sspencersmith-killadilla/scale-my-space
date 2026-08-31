@@ -4,9 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Download, ImagePlus, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { generatePlan } from "@/lib/plans.functions";
+import { usePlanGeneration } from "@/hooks/usePlanGeneration";
 import type { DetailLevel } from "@/lib/plan-prompt";
-import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,7 +66,7 @@ function PlanViewer() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const runGenerate = useServerFn(generatePlan);
+  const { generate, stage: aiStage } = usePlanGeneration();
   const [regenerating, setRegenerating] = useState(false);
   const [detailLevel, setDetailLevel] = useState<DetailLevel>("standard");
   const [uploading, setUploading] = useState(false);
@@ -153,7 +152,7 @@ function PlanViewer() {
   async function regenerate() {
     setRegenerating(true);
     try {
-      await runGenerate({ data: { projectId: id, detailLevel } });
+      await generate({ projectId: id, detailLevel });
       await queryClient.invalidateQueries({ queryKey: ["project", id] });
       toast.success("Plan redrafted from your photos.");
     } catch (err) {
