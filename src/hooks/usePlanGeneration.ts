@@ -75,7 +75,7 @@ export function usePlanGeneration() {
         setBusy(false);
       }
     },
-    [runDraft, runReview, runDetail],
+    [runDraft, runReview, runRedraft, runDetail],
   );
 
   return { generate, stage, busy };
