@@ -80,10 +80,42 @@ export const draftPlan = createServerFn({ method: "POST" })
     }
   });
 
-/** Stage 2 — check the massing against the photos and redraft once if needed. */
+/** Stage 2 — check the massing against the photos. Review only; no redraft here. */
 export const reviewPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => PlanStageInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const key = process.env['LOVABLE_API_KEY'];
+    if (!key) throw new Error("AI is not configured for this app.");
+    const { supabase } = context;
+
+    const [photos, row] = await Promise.all([
+      loadPhotoBlocks(supabase, data.projectId),
+      loadPlanRow(supabase, data.planId),
+    ]);
+
+    const review = await runReviewPass(key, photos, row.plan);
+    const corrections = (review.corrections ?? []).filter(Boolean);
+    const model = row.plan;
+    model.knownDifferences = [
+      ...new Set([...model.knownDifferences, ...(review.knownDifferences ?? [])]),
+    ].filter(Boolean);
+    await savePlanModel(supabase, data.planId, model);
+
+    return {
+      needsWork: review.verdict === "needs-work" && corrections.length > 0,
+      corrections,
+      targets: model.detailState?.targets ?? [],
+    };
+  });
+
+/** Stage 2b — redraft once from the review's corrections. Its own request: a
+ * measure pass is the slowest stage and must not share a request with review. */
+export const redraftPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    PlanStageInput.extend({ corrections: z.array(z.string()).min(1) }).parse(input),
+  )
   .handler(async ({ data, context }) => {
     const key = process.env['LOVABLE_API_KEY'];
     if (!key) throw new Error("AI is not configured for this app.");
@@ -94,41 +126,28 @@ export const reviewPlan = createServerFn({ method: "POST" })
       loadPhotoBlocks(supabase, data.projectId),
       loadPlanRow(supabase, data.planId),
     ]);
+    const level = (row.plan.detailState?.level ?? "standard") as
+      | "simple"
+      | "standard"
+      | "museum";
 
-    const review = await runReviewPass(key, photos, row.plan);
-    const corrections = (review.corrections ?? []).filter(Boolean);
-    let model = row.plan;
-    let redrafted = false;
-
-    if (review.verdict === "needs-work" && corrections.length) {
-      try {
-        const next = await runMeasurePass({
-          key,
-          photos,
-          project,
-          structureNotes: row.ai_notes ?? "",
-          refineNotes: corrections.map((c) => `- ${c}`).join("\n"),
-        });
-        next.structureNotes = model.structureNotes;
-        next.detailState = {
-          level: model.detailState?.level ?? "standard",
-          targets: detailTargets(next, (model.detailState?.level ?? "standard") as never),
-          done: [],
-        };
-        model = next;
-        redrafted = true;
-      } catch (e) {
-        console.error("[plan] corrective redraft failed, keeping the first draft", e);
-      }
-    }
-
-    model.knownDifferences = [
-      ...new Set([...model.knownDifferences, ...(review.knownDifferences ?? [])]),
+    const next = await runMeasurePass({
+      key,
+      photos,
+      project,
+      structureNotes: row.ai_notes ?? "",
+      refineNotes: data.corrections.map((c) => `- ${c}`).join("\n"),
+    });
+    next.structureNotes = row.plan.structureNotes;
+    next.knownDifferences = [
+      ...new Set([...next.knownDifferences, ...row.plan.knownDifferences]),
     ].filter(Boolean);
+    next.detailState = { level, targets: detailTargets(next, level), done: [] };
 
-    await savePlanModel(supabase, data.planId, model);
-    return { redrafted, targets: model.detailState?.targets ?? [] };
+    await savePlanModel(supabase, data.planId, next);
+    return { targets: next.detailState.targets };
   });
+
 
 /** Stage 3 — refine one mass. Called once per target so each request stays short. */
 export const detailMass = createServerFn({ method: "POST" })
