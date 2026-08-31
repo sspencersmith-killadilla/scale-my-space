@@ -260,7 +260,14 @@ export interface PlanModel {
   safetyNotes: string[];
   assumptions: string[];
   extraMaterials: string[];
+  /**
+   * Progress marker for the staged generation pipeline: which masses still need
+   * a detail pass. Lets a run resume after a dropped connection instead of
+   * starting over.
+   */
+  detailState?: { level: string; targets: string[]; done: string[] };
 }
+
 
 
 export type ScaleMode = "ratio" | "target";
@@ -846,8 +853,18 @@ function normalizeRaw(raw: unknown): PlanModel {
     finishingSteps: strs(r['finishingSteps']),
     assumptions: strs(r['assumptions']),
     extraMaterials: strs(r['extraMaterials']),
+    ...(obj(r['detailState'])['targets']
+      ? {
+          detailState: {
+            level: str(obj(r['detailState'])['level'], "standard"),
+            targets: strs(obj(r['detailState'])['targets']),
+            done: strs(obj(r['detailState'])['done']),
+          },
+        }
+      : {}),
   };
 }
+
 
 
 /* ------------------------------------------------------------------ */

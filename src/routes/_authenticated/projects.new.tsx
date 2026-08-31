@@ -3,10 +3,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { generatePlan } from "@/lib/plans.functions";
+import { usePlanGeneration } from "@/hooks/usePlanGeneration";
 import type { DetailLevel } from "@/lib/plan-prompt";
-import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/useAuth";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,7 +46,7 @@ interface Pick {
 function NewProject() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const runGenerate = useServerFn(generatePlan);
+  const { generate, stage: aiStage } = usePlanGeneration();
 
   const [title, setTitle] = useState("");
   const [subjectNotes, setSubjectNotes] = useState("");
@@ -118,7 +118,8 @@ function NewProject() {
       }
 
       setStage("Measuring the subject with AI…");
-      await runGenerate({ data: { projectId: project.id, detailLevel } });
+      await generate({ projectId: project.id, detailLevel });
+
 
       toast.success("Plan drafted.");
       navigate({ to: "/projects/$id", params: { id: project.id } });
@@ -326,7 +327,7 @@ function NewProject() {
         <Button type="submit" size="lg" disabled={busy} className="w-full">
           {busy ? (
             <>
-              <Loader2 className="mr-2 size-4 animate-spin" /> {stage}
+              <Loader2 className="mr-2 size-4 animate-spin" /> {aiStage || stage}
             </>
           ) : (
             "Generate my plan"
