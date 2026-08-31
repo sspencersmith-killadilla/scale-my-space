@@ -242,30 +242,35 @@ export const generatePlan = createServerFn({ method: "POST" })
       const details = await Promise.all(
         targets.map(async (mass) => {
           try {
-            const content = await callGateway(key, {
-              messages: [
-                { role: "system", content: DETAIL_SYSTEM_PROMPT },
-                {
-                  role: "user",
-                  content: [
-                    {
-                      type: "text",
-                      text: buildDetailPrompt({
-                        massSummary: summarizeMass(mass),
-                        geometrySummary,
-                        structureNotes,
-                        level,
-                      }),
-                    },
-                    ...photoBlocks,
-                  ],
+            const content = await callGateway(
+              key,
+              {
+                messages: [
+                  { role: "system", content: DETAIL_SYSTEM_PROMPT },
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "text",
+                        text: buildDetailPrompt({
+                          massSummary: summarizeMass(mass),
+                          geometrySummary,
+                          structureNotes,
+                          level,
+                        }),
+                      },
+                      ...photoBlocks,
+                    ],
+                  },
+                ],
+                response_format: {
+                  type: "json_schema",
+                  json_schema: { name: "mass_detail", strict: true, schema: detailJsonSchema },
                 },
-              ],
-              response_format: {
-                type: "json_schema",
-                json_schema: { name: "mass_detail", strict: true, schema: detailJsonSchema },
               },
-            });
+              "detail",
+            );
+
             return { mass, raw: parseJson(content) };
           } catch (e) {
             console.error("Detail pass failed for mass", mass.id, e);
