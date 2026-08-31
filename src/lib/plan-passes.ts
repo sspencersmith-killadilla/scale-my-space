@@ -292,3 +292,73 @@ export function mergeDetail(model: PlanModel, parent: PlanMass, raw: unknown): P
   }
   return next;
 }
+
+/* ------------------------------------------------------------------ */
+/* Persistence helpers                                                 */
+/* ------------------------------------------------------------------ */
+
+export async function loadProject(supabase: Db, projectId: string): Promise<ProjectRow> {
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", projectId)
+    .single();
+  if (error || !data) throw new Error("Project not found.");
+  return data;
+}
+
+export async function loadPlanRow(supabase: Db, planId: string) {
+  const { data, error } = await supabase
+    .from("plans")
+    .select("id, version, model, ai_notes")
+    .eq("id", planId)
+    .single();
+  if (error || !data) throw new Error("Plan not found.");
+  return { ...data, plan: normalizePlanModel(data.model) };
+}
+
+export async function insertPlanVersion(input: {
+  supabase: Db;
+  projectId: string;
+  userId: string;
+  model: PlanModel;
+  aiNotes: string;
+}) {
+  const { data: existing } = await input.supabase
+    .from("plans")
+    .select("version")
+    .eq("project_id", input.projectId)
+    .order("version", { ascending: false })
+    .limit(1);
+  const version = (existing?.[0]?.version ?? 0) + 1;
+
+  const { data: inserted, error } = await input.supabase
+    .from("plans")
+    .insert({
+      project_id: input.projectId,
+      user_id: input.userId,
+      version,
+      model: input.model as never,
+      ai_notes: input.aiNotes.slice(0, 4000),
+    })
+    .select("id, version")
+    .single();
+  if (error || !inserted) throw new Error(error?.message ?? "Could not save the plan.");
+  return inserted;
+}
+
+export async function savePlanModel(supabase: Db, planId: string, model: PlanModel) {
+  const { error } = await supabase
+    .from("plans")
+    .update({ model: model as never, updated_at: new Date().toISOString() })
+    .eq("id", planId);
+  if (error) throw new Error(error.message);
+}
+
+export async function setProjectStatus(supabase: Db, projectId: string, status: string) {
+  try {
+    await supabase.from("projects").update({ status }).eq("id", projectId);
+  } catch (e) {
+    console.error("[plan] could not update project status", e);
+  }
+}
