@@ -305,5 +305,7 @@ export const generatePlan = createServerFn({ method: "POST" })
 
     await supabase.from("projects").update({ status: "ready" }).eq("id", data.projectId);
 
-    return { planId: inserted.id, version: inserted.version, model: inserted.model };
+      return { planId: inserted.id, version: inserted.version, model: inserted.model };
+    }
   });
+
