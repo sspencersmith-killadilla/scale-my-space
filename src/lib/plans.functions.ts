@@ -40,8 +40,10 @@ export const generatePlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => Input.parse(input))
   .handler(async ({ data, context }) => {
-    const key = process.env['LOVABLE_API_KEY'];
-    if (!key) throw new Error("AI is not configured for this app.");
+    const rawKey = process.env['LOVABLE_API_KEY'];
+    if (!rawKey) throw new Error("AI is not configured for this app.");
+    const key: string = rawKey;
+
     const { supabase, userId } = context;
     // Any abort past this point must not leave the project stuck on "generating".
     const markFailed = async () => {
