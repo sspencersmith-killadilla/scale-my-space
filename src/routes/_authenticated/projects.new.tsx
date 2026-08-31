@@ -3,10 +3,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { generatePlan } from "@/lib/plans.functions";
+import { usePlanGeneration } from "@/hooks/usePlanGeneration";
 import type { DetailLevel } from "@/lib/plan-prompt";
-import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/useAuth";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
