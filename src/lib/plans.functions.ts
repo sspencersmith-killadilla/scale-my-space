@@ -185,25 +185,30 @@ export const generatePlan = createServerFn({ method: "POST" })
     /* ---- Pass 3: review the massing against the photos, then redraft once ---- */
     let review: { verdict?: string; corrections?: string[]; knownDifferences?: string[] } = {};
     try {
-      const reviewContent = await callGateway(key, {
-        messages: [
-          { role: "system", content: REVIEW_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `Plan geometry to review:\n${summarizeGeometry(model)}`,
-              },
-              ...photoBlocks,
-            ],
+      const reviewContent = await callGateway(
+        key,
+        {
+          messages: [
+            { role: "system", content: REVIEW_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `Plan geometry to review:\n${summarizeGeometry(model)}`,
+                },
+                ...photoBlocks,
+              ],
+            },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: { name: "plan_review", strict: true, schema: reviewJsonSchema },
           },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "plan_review", strict: true, schema: reviewJsonSchema },
         },
-      });
+        "review",
+      );
+
       review = parseJson(reviewContent) as typeof review;
     } catch (e) {
       console.error("Plan review pass failed", e);
