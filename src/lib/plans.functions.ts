@@ -43,6 +43,23 @@ export const generatePlan = createServerFn({ method: "POST" })
     const key = process.env['LOVABLE_API_KEY'];
     if (!key) throw new Error("AI is not configured for this app.");
     const { supabase, userId } = context;
+    // Any abort past this point must not leave the project stuck on "generating".
+    const markFailed = async () => {
+      try {
+        await supabase.from("projects").update({ status: "failed" }).eq("id", data.projectId);
+      } catch (e) {
+        console.error("Could not mark project failed", e);
+      }
+    };
+    try {
+      return await run();
+    } catch (e) {
+      await markFailed();
+      throw e;
+    }
+
+    async function run() {
+
 
     const { data: project, error: projectError } = await supabase
       .from("projects")
