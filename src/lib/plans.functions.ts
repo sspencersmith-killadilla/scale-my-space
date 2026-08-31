@@ -25,7 +25,7 @@ import {
   normalizePlanModel,
   type PlanModel,
 } from "./plan-model";
-import { callGateway, parseJson, type ContentBlock } from "./plan-gateway";
+import { callGateway, GatewayError, parseJson, type ContentBlock } from "./plan-gateway";
 
 const Input = z.object({
   projectId: z.string().uuid(),
