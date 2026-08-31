@@ -327,7 +327,7 @@ function NewProject() {
         <Button type="submit" size="lg" disabled={busy} className="w-full">
           {busy ? (
             <>
-              <Loader2 className="mr-2 size-4 animate-spin" /> {stage}
+              <Loader2 className="mr-2 size-4 animate-spin" /> {aiStage || stage}
             </>
           ) : (
             "Generate my plan"
