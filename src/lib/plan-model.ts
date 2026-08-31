@@ -853,8 +853,18 @@ function normalizeRaw(raw: unknown): PlanModel {
     finishingSteps: strs(r['finishingSteps']),
     assumptions: strs(r['assumptions']),
     extraMaterials: strs(r['extraMaterials']),
+    ...(obj(r['detailState'])['targets']
+      ? {
+          detailState: {
+            level: str(obj(r['detailState'])['level'], "standard"),
+            targets: strs(obj(r['detailState'])['targets']),
+            done: strs(obj(r['detailState'])['done']),
+          },
+        }
+      : {}),
   };
 }
+
 
 
 /* ------------------------------------------------------------------ */
