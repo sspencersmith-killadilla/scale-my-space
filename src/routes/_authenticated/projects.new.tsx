@@ -46,7 +46,7 @@ interface Pick {
 function NewProject() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const runGenerate = useServerFn(generatePlan);
+  const { generate, stage: aiStage } = usePlanGeneration();
 
   const [title, setTitle] = useState("");
   const [subjectNotes, setSubjectNotes] = useState("");
