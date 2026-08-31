@@ -259,7 +259,6 @@ export const planJsonSchema = {
     knownDifferences: { type: "array", items: { type: "string" } },
     masses: {
       type: "array",
-      maxItems: 40,
       description:
         "Every volume of the subject. One entry per shape, matching the structural reading's count.",
       items: {
@@ -368,7 +367,6 @@ export const planJsonSchema = {
     },
     features: {
       type: "array",
-      maxItems: 24,
       items: {
         type: "object",
         additionalProperties: false,
@@ -423,7 +421,6 @@ export const planJsonSchema = {
 
     parts: {
       type: "array",
-      maxItems: 60,
       items: {
         type: "object",
         additionalProperties: false,
@@ -470,7 +467,6 @@ export const planJsonSchema = {
     },
     openings: {
       type: "array",
-      maxItems: 40,
       items: {
         type: "object",
         additionalProperties: false,
