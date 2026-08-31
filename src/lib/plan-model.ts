@@ -521,11 +521,23 @@ export function emptyPlanModel(): PlanModel {
   };
 }
 
+/**
+ * Upper bounds on generated geometry. These used to live in the AI JSON schema,
+ * but the structured-output validator rejects array size keywords, so the caps
+ * are enforced here instead.
+ */
+export const PLAN_LIMITS = { masses: 40, features: 24, parts: 60, openings: 40 } as const;
+
 /** Defensive normalizer for AI/db JSON so the UI never crashes on a bad field. */
 export function normalizePlanModel(raw: unknown): PlanModel {
   const model = normalizeRaw(raw);
+  model.masses = model.masses.slice(0, PLAN_LIMITS.masses);
+  model.features = model.features.slice(0, PLAN_LIMITS.features);
+  model.parts = model.parts.slice(0, PLAN_LIMITS.parts);
+  model.openings = model.openings.slice(0, PLAN_LIMITS.openings);
   sanitizeMasses(model);
   clampOpenings(model);
+
   // Keep `overall` in agreement with the massing so every scale calculation,
   // drawing and 3D view uses the same bounding box.
   if (model.masses.length) {

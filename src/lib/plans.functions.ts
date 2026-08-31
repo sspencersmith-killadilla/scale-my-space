@@ -40,9 +40,28 @@ export const generatePlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => Input.parse(input))
   .handler(async ({ data, context }) => {
-    const key = process.env['LOVABLE_API_KEY'];
-    if (!key) throw new Error("AI is not configured for this app.");
+    const rawKey = process.env['LOVABLE_API_KEY'];
+    if (!rawKey) throw new Error("AI is not configured for this app.");
+    const key: string = rawKey;
+
     const { supabase, userId } = context;
+    // Any abort past this point must not leave the project stuck on "generating".
+    const markFailed = async () => {
+      try {
+        await supabase.from("projects").update({ status: "failed" }).eq("id", data.projectId);
+      } catch (e) {
+        console.error("Could not mark project failed", e);
+      }
+    };
+    try {
+      return await run();
+    } catch (e) {
+      await markFailed();
+      throw e;
+    }
+
+    async function run() {
+
 
     const { data: project, error: projectError } = await supabase
       .from("projects")
@@ -86,74 +105,110 @@ export const generatePlan = createServerFn({ method: "POST" })
     ]);
 
     /* ---- Pass 1: read the structure (massing, tops, opening shapes) ---- */
-    const structureNotes = await callGateway(key, {
-      messages: [
-        { role: "system", content: READ_SYSTEM_PROMPT },
+    // The structural reading is helpful but optional: a failure here should not
+    // sink the whole run, the measure pass can still work straight off the photos.
+    let structureNotes = "";
+    try {
+      structureNotes = await callGateway(
+        key,
         {
-          role: "user",
-          content: [
-            { type: "text", text: buildReadPrompt(imageUrls.length) },
-            ...photoBlocks,
+          messages: [
+            { role: "system", content: READ_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: buildReadPrompt(imageUrls.length) },
+                ...photoBlocks,
+              ],
+            },
           ],
         },
-      ],
-    });
+        "read",
+      );
+    } catch (e) {
+      console.error("Structure reading pass failed, continuing without it", e);
+    }
 
     /* ---- Pass 2: measure and write the plan against that reading ---- */
-    const measure = async (refineNotes?: string) => {
-      const content = await callGateway(key, {
-        messages: [
-          { role: "system", content: PLAN_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: buildUserPrompt({
-                  subjectNotes: project.subject_notes ?? "",
-                  referenceNote: project.reference_note ?? "",
-                  photoCount: imageUrls.length,
-                  structureNotes,
-                  ...(refineNotes ? { refineNotes } : {}),
-
-                }),
-              },
-              ...photoBlocks,
-            ],
-          },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "woodworking_plan", strict: true, schema: planJsonSchema },
+    const measure = async (refineNotes?: string, relaxed = false) => {
+      const content = await callGateway(
+        key,
+        {
+          messages: [
+            { role: "system", content: PLAN_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: buildUserPrompt({
+                    subjectNotes: project.subject_notes ?? "",
+                    referenceNote: project.reference_note ?? "",
+                    photoCount: imageUrls.length,
+                    structureNotes,
+                    ...(refineNotes ? { refineNotes } : {}),
+                  }),
+                },
+                ...photoBlocks,
+              ],
+            },
+          ],
+          // The relaxed retry drops structured output and asks for plain JSON, so a
+          // schema the provider dislikes cannot block the plan entirely.
+          ...(relaxed
+            ? { response_format: { type: "json_object" } }
+            : {
+                response_format: {
+                  type: "json_schema",
+                  json_schema: {
+                    name: "woodworking_plan",
+                    strict: true,
+                    schema: planJsonSchema,
+                  },
+                },
+              }),
         },
-      });
+        "measure",
+      );
       return normalizePlanModel(parseJson(content));
     };
 
-    let model = await measure(data.refineNotes);
+    let model;
+    try {
+      model = await measure(data.refineNotes);
+    } catch (e) {
+      console.error("Measure pass failed, retrying without structured output", e);
+      model = await measure(data.refineNotes, true);
+    }
+
 
     /* ---- Pass 3: review the massing against the photos, then redraft once ---- */
     let review: { verdict?: string; corrections?: string[]; knownDifferences?: string[] } = {};
     try {
-      const reviewContent = await callGateway(key, {
-        messages: [
-          { role: "system", content: REVIEW_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `Plan geometry to review:\n${summarizeGeometry(model)}`,
-              },
-              ...photoBlocks,
-            ],
+      const reviewContent = await callGateway(
+        key,
+        {
+          messages: [
+            { role: "system", content: REVIEW_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `Plan geometry to review:\n${summarizeGeometry(model)}`,
+                },
+                ...photoBlocks,
+              ],
+            },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: { name: "plan_review", strict: true, schema: reviewJsonSchema },
           },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "plan_review", strict: true, schema: reviewJsonSchema },
         },
-      });
+        "review",
+      );
+
       review = parseJson(reviewContent) as typeof review;
     } catch (e) {
       console.error("Plan review pass failed", e);
@@ -187,30 +242,35 @@ export const generatePlan = createServerFn({ method: "POST" })
       const details = await Promise.all(
         targets.map(async (mass) => {
           try {
-            const content = await callGateway(key, {
-              messages: [
-                { role: "system", content: DETAIL_SYSTEM_PROMPT },
-                {
-                  role: "user",
-                  content: [
-                    {
-                      type: "text",
-                      text: buildDetailPrompt({
-                        massSummary: summarizeMass(mass),
-                        geometrySummary,
-                        structureNotes,
-                        level,
-                      }),
-                    },
-                    ...photoBlocks,
-                  ],
+            const content = await callGateway(
+              key,
+              {
+                messages: [
+                  { role: "system", content: DETAIL_SYSTEM_PROMPT },
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "text",
+                        text: buildDetailPrompt({
+                          massSummary: summarizeMass(mass),
+                          geometrySummary,
+                          structureNotes,
+                          level,
+                        }),
+                      },
+                      ...photoBlocks,
+                    ],
+                  },
+                ],
+                response_format: {
+                  type: "json_schema",
+                  json_schema: { name: "mass_detail", strict: true, schema: detailJsonSchema },
                 },
-              ],
-              response_format: {
-                type: "json_schema",
-                json_schema: { name: "mass_detail", strict: true, schema: detailJsonSchema },
               },
-            });
+              "detail",
+            );
+
             return { mass, raw: parseJson(content) };
           } catch (e) {
             console.error("Detail pass failed for mass", mass.id, e);
@@ -288,5 +348,7 @@ export const generatePlan = createServerFn({ method: "POST" })
 
     await supabase.from("projects").update({ status: "ready" }).eq("id", data.projectId);
 
-    return { planId: inserted.id, version: inserted.version, model: inserted.model };
+      return { planId: inserted.id, version: inserted.version, model: inserted.model };
+    }
   });
+
