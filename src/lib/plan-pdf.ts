@@ -15,9 +15,11 @@ import {
   modelOverall,
   resolveDenominator,
   sheetAreaSqIn,
+  stagePartCodes,
   type FaceKey,
   type PlanModel,
   type ScaleSettings,
+  type CutListRow,
 } from "./plan-model";
 
 const INK = [20, 32, 43] as const;
@@ -378,7 +380,7 @@ export function buildPlanPdf(
     );
     doc.setFont("courier", "normal");
     doc.setFontSize(9);
-    const nameLines = doc.splitTextToSize(r.name, 140) as string[];
+    const nameLines = doc.splitTextToSize(`[${r.code}] ${r.name}`, 140) as string[];
     doc.setFontSize(8);
     const noteLines = doc.splitTextToSize(noteText, noteW) as string[];
     const openLines = openingText.flatMap(
@@ -571,7 +573,18 @@ export function buildPlanPdf(
         if (stage.tools.length)
           y = wrapped(doc, `TOOLS: ${stage.tools.join(", ")}`, MARGIN, y + 6, contentW, 10) + 2;
         if (stage.parts.length)
-          y = wrapped(doc, `PARTS: ${stage.parts.join(", ")}`, MARGIN, y + 4, contentW, 10) + 2;
+          y = wrapped(
+            doc,
+            `PARTS: ${stage.parts.join(", ")}${
+              stagePartCodes(stage.parts, rows).length
+                ? ` (${stagePartCodes(stage.parts, rows).join(", ")})`
+                : ""
+            }`,
+            MARGIN,
+            y + 4,
+            contentW,
+            10,
+          ) + 2;
       }
       y += 10;
 
@@ -580,9 +593,12 @@ export function buildPlanPdf(
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9.5);
         doc.setTextColor(...ORANGE);
-        doc.text(`${si + 1}.${i + 1}`, MARGIN, y);
+        doc.setDrawColor(...INK);
+        doc.setLineWidth(0.6);
+        doc.rect(MARGIN, y - 8, 8, 8);
+        doc.text(`${si + 1}.${i + 1}`, MARGIN + 12, y);
         doc.setTextColor(...INK);
-        y = wrapped(doc, step.instruction, MARGIN + 30, y, contentW - 30, 12);
+        y = wrapped(doc, step.instruction, MARGIN + 38, y, contentW - 38, 12);
         if (step.detail) {
           doc.setFont("helvetica", "normal");
           doc.setFontSize(9);
@@ -594,6 +610,18 @@ export function buildPlanPdf(
           doc.setFontSize(8.5);
           doc.setTextColor(...BLUE);
           y = wrapped(doc, `Tip: ${step.tip}`, MARGIN + 30, y + 12, contentW - 30, 11);
+        }
+        if (step.check) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8.5);
+          doc.setTextColor(...BLUE);
+          y = wrapped(doc, `Check it: ${step.check}`, MARGIN + 30, y + 12, contentW - 30, 11);
+        }
+        if (step.mistake) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8.5);
+          doc.setTextColor(...ORANGE);
+          y = wrapped(doc, `Common mistake: ${step.mistake}`, MARGIN + 30, y + 12, contentW - 30, 11);
         }
         y += 16;
       });
@@ -691,6 +719,12 @@ export function buildPlanPdf(
     footer(doc, page);
   }
 
+  /* ---------- Full-size templates ---------- */
+  page = drawTemplatePages(doc, model, rows, o.denominator, subtitle, page);
+
+  /* ---------- Part label stickers ---------- */
+  page = drawStickerPage(doc, rows, subtitle, page);
+
   /* ---------- Glossary & assumptions ---------- */
   doc.addPage();
   page += 1;
@@ -719,4 +753,180 @@ export function buildPlanPdf(
 
 
   return doc;
+}
+
+const PT = 72; // PDF points per inch: templates print at true size at 100% scale.
+
+function testSquare(doc: jsPDF, x: number, y: number) {
+  doc.setDrawColor(...INK);
+  doc.setLineWidth(0.8);
+  doc.rect(x, y, PT, PT);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...GREY);
+  doc.text("1 inch test square — print at 100%", x + PT + 8, y + 10);
+  doc.text("If this is not exactly 1\" wide, fix your print scale.", x + PT + 8, y + 21);
+}
+
+interface TemplateShape {
+  title: string;
+  kind: "arch" | "circle";
+  widthIn: number;
+  heightIn: number;
+}
+
+/** Collect every curved piece small enough to print at true size on a letter page. */
+export function templateShapes(model: PlanModel, rows: CutListRow[], denominator: number): TemplateShape[] {
+  const shapes: TemplateShape[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) {
+    for (const op of r.openings) {
+      if (!/arch|circle/i.test(op.label)) continue;
+      const key = `${op.widthIn}x${op.heightIn}:${/circle/i.test(op.label)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      shapes.push({
+        title: `${op.label} cut-out (in part ${r.code})`,
+        kind: /circle/i.test(op.label) ? "circle" : "arch",
+        widthIn: op.widthIn,
+        heightIn: op.heightIn,
+      });
+    }
+  }
+  for (const m of ensureMasses(model)) {
+    if (!isRoundMass(m)) continue;
+    const d = massWidth(m) / denominator;
+    const key = `disc${d.toFixed(3)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    shapes.push({ title: `${m.name} — round disc / ring guide`, kind: "circle", widthIn: d, heightIn: d });
+  }
+  return shapes.filter((s) => s.widthIn > 0.1 && s.widthIn <= 7 && s.heightIn <= 8.5);
+}
+
+function drawTemplatePages(
+  doc: jsPDF,
+  model: PlanModel,
+  rows: CutListRow[],
+  denominator: number,
+  subtitle: string,
+  page: number,
+): number {
+  const shapes = templateShapes(model, rows, denominator);
+  if (!shapes.length) return page;
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const start = () => {
+    doc.addPage();
+    page += 1;
+    header(doc, "Full-size templates", subtitle);
+    testSquare(doc, MARGIN, 76);
+    return 76 + PT + 30;
+  };
+  let y = start();
+  let x = MARGIN;
+  let rowH = 0;
+  for (const s of shapes) {
+    const w = s.widthIn * PT;
+    const h = s.heightIn * PT;
+    if (x + w > W - MARGIN) {
+      x = MARGIN;
+      y += rowH + 30;
+      rowH = 0;
+    }
+    if (y + h + 20 > H - 50) {
+      footer(doc, page);
+      y = start();
+      x = MARGIN;
+      rowH = 0;
+    }
+    doc.setDrawColor(...INK);
+    doc.setLineWidth(0.6);
+    if (s.kind === "circle") {
+      doc.ellipse(x + w / 2, y + h / 2, w / 2, h / 2);
+      doc.line(x + w / 2 - 4, y + h / 2, x + w / 2 + 4, y + h / 2);
+      doc.line(x + w / 2, y + h / 2 - 4, x + w / 2, y + h / 2 + 4);
+    } else {
+      const r = Math.min(w / 2, h);
+      const k = 0.5523 * r;
+      const cx = x + w / 2;
+      const top = y + r;
+      doc.lines(
+        [
+          [0, -(h - r)],
+          [0, -k, r - k, -r, r, -r],
+          [k, 0, r, r - k, r, r],
+          [0, h - r],
+          [-w, 0],
+        ],
+        x,
+        y + h,
+        [1, 1],
+        "S",
+        true,
+      );
+      void cx;
+      void top;
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...INK);
+    doc.text(doc.splitTextToSize(s.title, Math.max(w, 110)) as string[], x, y + h + 11);
+    doc.setTextColor(...GREY);
+    doc.text(`${formatInches(s.widthIn)} × ${formatInches(s.heightIn)}`, x, y + h + 30);
+    x += Math.max(w, 120) + 24;
+    rowH = Math.max(rowH, h + 20);
+  }
+  footer(doc, page);
+  return page;
+}
+
+function drawStickerPage(doc: jsPDF, rows: CutListRow[], subtitle: string, page: number): number {
+  if (!rows.length) return page;
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const cellW = (W - MARGIN * 2) / 4;
+  const cellH = 46;
+  const start = () => {
+    doc.addPage();
+    page += 1;
+    header(doc, "Part labels — cut out and tape to each piece", subtitle);
+    return 80;
+  };
+  let y = start();
+  let col = 0;
+  const labels = rows.flatMap((r) =>
+    Array.from({ length: Math.min(r.quantity, 12) }, (_, i) => ({
+      code: r.code,
+      name: r.name,
+      n: r.quantity > 1 ? ` (${i + 1}/${r.quantity})` : "",
+    })),
+  );
+  for (const l of labels) {
+    if (y + cellH > H - 50) {
+      footer(doc, page);
+      y = start();
+      col = 0;
+    }
+    const x = MARGIN + col * cellW;
+    doc.setDrawColor(...GREY);
+    doc.setLineDashPattern([2, 2], 0);
+    doc.rect(x, y, cellW, cellH);
+    doc.setLineDashPattern([], 0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(...ORANGE);
+    doc.text(l.code, x + 8, y + 18);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...INK);
+    doc.text((doc.splitTextToSize(l.name + l.n, cellW - 16) as string[]).slice(0, 2), x + 8, y + 30);
+    col += 1;
+    if (col === 4) {
+      col = 0;
+      y += cellH;
+    }
+  }
+  footer(doc, page);
+  return page;
 }
