@@ -1,0 +1,1 @@
+ALTER TABLE public.project_images ADD COLUMN IF NOT EXISTS view_tag text NOT NULL DEFAULT 'unsure', ADD COLUMN IF NOT EXISTS note text NOT NULL DEFAULT '';

@@ -77,26 +77,32 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          note: string
           project_id: string
           sort_order: number
           storage_path: string
           user_id: string
+          view_tag: string
         }
         Insert: {
           created_at?: string
           id?: string
+          note?: string
           project_id: string
           sort_order?: number
           storage_path: string
           user_id: string
+          view_tag?: string
         }
         Update: {
           created_at?: string
           id?: string
+          note?: string
           project_id?: string
           sort_order?: number
           storage_path?: string
           user_id?: string
+          view_tag?: string
         }
         Relationships: [
           {
