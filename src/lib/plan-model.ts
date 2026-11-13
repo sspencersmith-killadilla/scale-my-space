@@ -208,6 +208,10 @@ export interface PlanStep {
   instruction: string;
   detail: string;
   tip: string;
+  /** How the builder confirms this step is right before moving on. */
+  check: string;
+  /** The most common way a first-time builder gets this step wrong. */
+  mistake: string;
 }
 
 export interface PlanStage {
@@ -278,6 +282,8 @@ export interface ScaleSettings {
   targetHeightIn: number | null;
   stockThicknessIn: number;
   material: string;
+  /** Beginner mode: round every cut to the nearest 1/16" so it is easy to mark with a ruler. */
+  beginner?: boolean;
 }
 
 export const SCALE_PRESETS = [
@@ -323,6 +329,8 @@ export function modelOverall(model: PlanModel, scale: ScaleSettings) {
 
 export interface CutListRow {
   id: string;
+  /** Short label (A1, B2…) printed on every sheet and on the sticker page. */
+  code: string;
   name: string;
   role: PartRole;
   quantity: number;
@@ -347,8 +355,45 @@ export interface CutListRow {
 
 const SNAP = 32; // snap to nearest 1/32"
 
-export function snapInches(value: number): number {
-  return Math.max(1 / SNAP, Math.round(value * SNAP) / SNAP);
+export function snapInches(value: number, steps = SNAP): number {
+  return Math.max(1 / steps, Math.round(value * steps) / steps);
+}
+
+/** Beginner rounding step: 1/16" is the finest mark on most tape measures and rulers. */
+export const BEGINNER_SNAP = 16;
+
+/**
+ * Deterministic part codes: one letter per part role in order of first
+ * appearance, numbered within the role (A1, A2, B1…).
+ */
+export function assignPartCodes(parts: Array<{ id: string; role: string }>): Map<string, string> {
+  const letters = new Map<string, string>();
+  const counts = new Map<string, number>();
+  const codes = new Map<string, string>();
+  for (const p of parts) {
+    if (!letters.has(p.role)) {
+      const n = letters.size;
+      letters.set(p.role, n < 26 ? String.fromCharCode(65 + n) : `Z${n - 25}`);
+    }
+    const letter = letters.get(p.role)!;
+    const c = (counts.get(letter) ?? 0) + 1;
+    counts.set(letter, c);
+    codes.set(p.id, `${letter}${c}`);
+  }
+  return codes;
+}
+
+/** Codes of the cut-list rows a stage's free-text part names refer to. */
+export function stagePartCodes(partNames: string[], rows: CutListRow[]): string[] {
+  const out: string[] = [];
+  for (const name of partNames) {
+    const n = name.toLowerCase();
+    const hit = rows.find(
+      (r) => r.name.toLowerCase() === n || n.includes(r.name.toLowerCase()) || r.name.toLowerCase().includes(n),
+    );
+    if (hit && !out.includes(hit.code)) out.push(hit.code);
+  }
+  return out;
 }
 
 const ROLE_FACE: Partial<Record<PartRole, FaceKey>> = {
@@ -365,6 +410,9 @@ export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow
   const t = scale.stockThicknessIn;
   let sideWallSeen = 0;
   const parts = [...model.parts, ...derivedGeometryParts(model)];
+  const codes = assignPartCodes(parts);
+  const step = scale.beginner ? BEGINNER_SNAP : SNAP;
+  const snap = (v: number) => snapInches(v, step);
 
   return parts.map((part) => {
     let length = part.widthIn / d;
@@ -399,20 +447,21 @@ export function buildCutList(model: PlanModel, scale: ScaleSettings): CutListRow
               o.shape && o.shape !== "rectangle" ? ` (${o.shape.replace("-", " ")})` : ""
             }`,
             kind: o.kind,
-            fromLeftIn: snapInches(o.xIn / d),
-            fromBottomIn: snapInches(o.yIn / d),
-            widthIn: snapInches(o.widthIn / d),
-            heightIn: snapInches(o.heightIn / d),
+            fromLeftIn: snap(o.xIn / d),
+            fromBottomIn: snap(o.yIn / d),
+            widthIn: snap(o.widthIn / d),
+            heightIn: snap(o.heightIn / d),
           }))
       : [];
 
     return {
       id: part.id,
+      code: codes.get(part.id) ?? "",
       name: part.name,
       role: part.role,
       quantity: Math.max(1, Math.round(part.quantity)),
-      lengthIn: snapInches(length),
-      widthIn: snapInches(height),
+      lengthIn: snap(length),
+      widthIn: snap(height),
       thicknessIn: t,
       material: scale.material,
       notes: notes.join(". "),
@@ -822,12 +871,15 @@ function normalizeRaw(raw: unknown): PlanModel {
         tools: strs(o['tools']),
         parts: strs(o['parts']),
         steps: arr(o['steps']).map((s) => {
-          if (typeof s === "string") return { instruction: s, detail: "", tip: "" };
+          if (typeof s === "string")
+            return { instruction: s, detail: "", tip: "", check: "", mistake: "" };
           const so = obj(s);
           return {
             instruction: str(so['instruction']),
             detail: str(so['detail']),
             tip: str(so['tip']),
+            check: str(so['check']),
+            mistake: str(so['mistake']),
           };
         }),
         check: str(o['check']),
