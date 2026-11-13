@@ -106,7 +106,14 @@ Rules:
   Roof, Porch and details, Paint and finish, Final assembly). Each stage has a goal, the tools used, the parts involved,
   6-12 numbered steps, and a "check" describing how the builder verifies the stage is right before moving on. Each step has
   a short instruction plus a "detail" paragraph explaining exactly how to do it (clamping, glue amount, squareness,
-  drying time, angles, order) and an optional tip or common mistake.
+  drying time, angles, order), an optional tip, a "check" (one concrete test the builder can do with a square, ruler or
+  card to confirm the step worked) and a "mistake" (the most common way a first-time builder gets it wrong and how to
+  avoid it).
+- WRITE FOR A COMPLETE BEGINNER. Assume the reader has never built anything. One action per step, imperative verbs, no
+  unexplained jargon (any trade term you must use — kerf, rabbet, butt joint, dry-fit, square — goes in the glossary).
+  Name parts in steps exactly as they are named in the parts list so they can be matched to their part labels. Say which
+  face goes up/out, which edge meets which, and how long to wait for glue. Prefer glued butt joints and simple cuts; if a
+  shape is hard (curves, round towers), offer the easy substitute (stacked discs, a cardboard tube, a printed template).
 - assemblySteps: a plain flat summary list mirroring the stages (one line per major step) for readers who want a quick list.
 - paintPlan: one entry per visible colour area (walls, trim, roof, door, foundation, windows) with the observed colour, a
   close paint match description, and the painting technique/order.
@@ -545,11 +552,13 @@ export const planJsonSchema = {
             items: {
               type: "object",
               additionalProperties: false,
-              required: ["instruction", "detail", "tip"],
+              required: ["instruction", "detail", "tip", "check", "mistake"],
               properties: {
                 instruction: { type: "string" },
                 detail: { type: "string" },
                 tip: { type: "string" },
+                check: { type: "string" },
+                mistake: { type: "string" },
               },
             },
           },

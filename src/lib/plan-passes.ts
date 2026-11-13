@@ -46,17 +46,23 @@ export async function loadPhotoBlocks(
 ): Promise<ContentBlock[]> {
   const { data: images } = await supabase
     .from("project_images")
-    .select("storage_path")
+    .select("storage_path, view_tag, note")
     .eq("project_id", projectId)
     .order("sort_order", { ascending: true });
 
-  const paths = (images ?? []).map((i) => i.storage_path).slice(0, limit);
+  const rows = (images ?? []).slice(0, limit);
+  const paths = rows.map((i) => i.storage_path);
   if (!paths.length) throw new Error("Upload at least one photo before generating a plan.");
 
   const urls: string[] = [];
-  for (const path of paths) {
+  const labels: string[] = [];
+  for (const [idx, path] of paths.entries()) {
     const { data: blob } = await supabase.storage.from("project-media").download(path);
     if (!blob) continue;
+    const r = rows[idx]!;
+    const tag = r.view_tag && r.view_tag !== "unsure" ? ` The builder says this photo shows the ${r.view_tag} view.` : "";
+    const note = r.note ? ` Builder's note: "${r.note}" — treat any stated size as a firm calibration reference.` : "";
+    labels.push(tag + note);
     const bytes = new Uint8Array(await blob.arrayBuffer());
     let binary = "";
     for (let i = 0; i < bytes.length; i += 8192) {
@@ -70,7 +76,7 @@ export async function loadPhotoBlocks(
   return urls.flatMap((url, i) => [
     {
       type: "text" as const,
-      text: `Reference photo ${i + 1} of ${urls.length} (same subject, different view):`,
+      text: `Reference photo ${i + 1} of ${urls.length} (same subject, different view).${labels[i] ?? ""}`,
     },
     { type: "image_url" as const, image_url: { url } },
   ]);

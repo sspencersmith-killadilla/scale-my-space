@@ -11,6 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlanPreview3D } from "@/components/PlanPreview3D";
+import { GlossaryText } from "@/components/GlossaryText";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 
 import {
   Select,
@@ -36,10 +39,22 @@ import {
   modelOverall,
   normalizePlanModel,
   sheetAreaSqIn,
+  stagePartCodes,
   type FaceKey,
   type PlanModel,
   type ScaleSettings,
 } from "@/lib/plan-model";
+
+const BEGINNER_PRIMER = [
+  "Every part has a label (A1, B2…). Write the label in pencil on each piece as soon as you cut it, or print the sticker page from the PDF.",
+  "Measure twice, cut once. Mark with a sharp pencil and cut on the waste side of the line so the piece keeps its full size.",
+  "Cut a little long and sand down to the line — you can always remove wood, never add it back.",
+  "Dry-fit (assemble without glue) before every glue-up so you find problems while they are easy to fix.",
+  "Use a small square or a playing card corner to check every corner is 90° while the glue is wet.",
+  "Wood glue needs about 30 minutes clamped and a few hours before it takes stress. Wipe squeeze-out with a damp cloth.",
+  "Curved or arched pieces have full-size templates in the PDF: print at 100% (check the 1-inch square), cut out, trace.",
+  "Hold small parts with clamps or tape, never your fingers, near a blade.",
+];
 
 export const Route = createFileRoute("/_authenticated/projects/$id")({
   head: () => ({
@@ -117,8 +132,29 @@ function PlanViewer() {
       targetHeightIn: p.target_height_in ?? null,
       stockThicknessIn: p.stock_thickness_in ?? 0.25,
       material: p.material ?? MATERIAL_OPTIONS[0],
+      beginner: localStorage.getItem(`shrinkify.beginner.${id}`) !== "off",
     });
-  }, [data?.project]);
+  }, [data?.project, id]);
+
+  // Build progress: ticked steps saved on this device.
+  const progressKey = `shrinkify.progress.${id}`;
+  const [doneSteps, setDoneSteps] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      setDoneSteps(new Set(JSON.parse(localStorage.getItem(progressKey) ?? "[]") as string[]));
+    } catch {
+      setDoneSteps(new Set());
+    }
+  }, [progressKey]);
+  function toggleStep(key: string) {
+    setDoneSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      localStorage.setItem(progressKey, JSON.stringify([...next]));
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (data?.plan?.model) setModel(normalizePlanModel(data.plan.model));
@@ -137,6 +173,7 @@ function PlanViewer() {
 
   async function persistScale(next: ScaleSettings) {
     setScale(next);
+    localStorage.setItem(`shrinkify.beginner.${id}`, next.beginner ? "on" : "off");
     await supabase
       .from("projects")
       .update({
@@ -485,6 +522,20 @@ function PlanViewer() {
           </div>
         </div>
 
+        <label className="mt-5 flex items-start gap-3 rounded border border-border bg-secondary p-3">
+          <Switch
+            checked={scale.beginner ?? true}
+            onCheckedChange={(v) => persistScale({ ...scale, beginner: v })}
+            aria-label="Beginner mode"
+          />
+          <span className="text-sm">
+            <span className="font-semibold">Beginner mode</span>
+            <span className="block text-xs text-muted-foreground">
+              Rounds every cut to the nearest 1/16" so you can mark it with an ordinary ruler.
+            </span>
+          </span>
+        </label>
+
         <div className="mt-6 grid gap-4 border-t border-border pt-5 sm:grid-cols-3">
           {(
             [
@@ -556,7 +607,7 @@ function PlanViewer() {
             <table className="w-full border-collapse text-sm">
               <thead className="bg-secondary">
                 <tr>
-                  {["Part", "Qty", "Length", "Width", "Thickness", "Where it goes & how to cut it"].map(
+                  {["Label", "Part", "Qty", "Length", "Width", "Thickness", "Where it goes & how to cut it"].map(
                     (h) => (
                       <th key={h} className="tech-label border-b border-border px-4 py-3 text-left">
                         {h}
@@ -568,6 +619,7 @@ function PlanViewer() {
               <tbody className="font-mono">
                 {rows.map((r) => (
                   <tr key={r.id} className="border-b border-border align-top last:border-0">
+                    <td className="px-4 py-3 font-bold text-accent">{r.code}</td>
                     <td className="px-4 py-3 font-sans font-medium">{r.name}</td>
                     <td className="px-4 py-3">{r.quantity}</td>
                     <td className="px-4 py-3">{formatInches(r.lengthIn)}</td>
@@ -766,6 +818,23 @@ function PlanViewer() {
         </TabsContent>
 
         <TabsContent value="build" className="space-y-8 pt-6">
+          {model.assemblyStages.length > 0 && (() => {
+            const total = model.assemblyStages.reduce((n, st) => n + st.steps.length, 0);
+            const done = [...doneSteps].length;
+            return (
+              <p className="tech-label text-blueprint">
+                Progress: {Math.min(done, total)} of {total} steps done — tick each step as you finish it.
+              </p>
+            );
+          })()}
+          <section className="rounded-lg border-2 border-foreground bg-card p-5">
+            <h3 className="tech-label text-accent">New to woodworking? Read this first</h3>
+            <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+              {BEGINNER_PRIMER.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
+          </section>
           {model.safetyNotes.length > 0 && (
             <section className="rounded-lg border border-accent/50 bg-secondary p-5">
               <h3 className="tech-label text-accent">Before you start</h3>
@@ -798,20 +867,45 @@ function PlanViewer() {
                       <p className="text-xs text-muted-foreground">
                         <span className="tech-label text-blueprint">Parts </span>
                         {stage.parts.join(", ")}
+                        {stagePartCodes(stage.parts, rows).length > 0 && (
+                          <span className="ml-1 font-mono font-bold text-accent">
+                            ({stagePartCodes(stage.parts, rows).join(", ")})
+                          </span>
+                        )}
                       </p>
                     )}
                   </div>
                   <ol className="mt-5 space-y-5">
                     {stage.steps.map((step, i) => (
                       <li key={i} className="flex gap-4 border-b border-border pb-4 last:border-0">
+                        <Checkbox
+                          className="mt-0.5"
+                          checked={doneSteps.has(`${si}.${i}`)}
+                          onCheckedChange={() => toggleStep(`${si}.${i}`)}
+                          aria-label={`Mark step ${si + 1}.${i + 1} done`}
+                        />
                         <span className="tech-label shrink-0 text-accent">
                           {si + 1}.{i + 1}
                         </span>
-                        <div>
-                          <p className="text-sm font-medium">{step.instruction}</p>
+                        <div className={doneSteps.has(`${si}.${i}`) ? "opacity-50" : ""}>
+                          <p className="text-sm font-medium">
+                            <GlossaryText text={step.instruction} glossary={model.glossary} />
+                          </p>
                           {step.detail && (
                             <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                              {step.detail}
+                              <GlossaryText text={step.detail} glossary={model.glossary} />
+                            </p>
+                          )}
+                          {step.check && (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              <span className="tech-label text-blueprint">Check it </span>
+                              {step.check}
+                            </p>
+                          )}
+                          {step.mistake && (
+                            <p className="mt-2 border-l-2 border-destructive pl-3 text-xs text-muted-foreground">
+                              <span className="font-semibold">Common mistake: </span>
+                              {step.mistake}
                             </p>
                           )}
                           {step.tip && (
