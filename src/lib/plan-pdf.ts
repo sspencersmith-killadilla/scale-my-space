@@ -849,8 +849,6 @@ function drawTemplatePages(
     } else {
       const r = Math.min(w / 2, h);
       const k = 0.5523 * r;
-      const cx = x + w / 2;
-      const top = y + r;
       doc.lines(
         [
           [0, -(h - r)],
@@ -865,8 +863,6 @@ function drawTemplatePages(
         "S",
         true,
       );
-      void cx;
-      void top;
     }
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
