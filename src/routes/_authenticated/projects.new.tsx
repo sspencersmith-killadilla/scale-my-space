@@ -41,7 +41,20 @@ export const Route = createFileRoute("/_authenticated/projects/new")({
 interface Pick {
   file: File;
   url: string;
+  tag: string;
+  note: string;
 }
+
+const VIEW_TAGS = [
+  ["unsure", "View?"],
+  ["front", "Front"],
+  ["back", "Back"],
+  ["left", "Left side"],
+  ["right", "Right side"],
+  ["corner", "Corner"],
+  ["closeup", "Close-up"],
+  ["above", "From above"],
+] as const;
 
 function NewProject() {
   const navigate = useNavigate();
@@ -66,7 +79,7 @@ function NewProject() {
     const next = Array.from(files)
       .filter((f) => f.type.startsWith("image/"))
       .slice(0, 8 - picks.length)
-      .map((file) => ({ file, url: URL.createObjectURL(file) }));
+      .map((file) => ({ file, url: URL.createObjectURL(file), tag: "unsure", note: "" }));
     setPicks((p) => [...p, ...next]);
   }
 
@@ -113,6 +126,8 @@ function NewProject() {
           user_id: user.id,
           storage_path: path,
           sort_order: i,
+          view_tag: pick.tag,
+          note: pick.note.trim(),
         });
         if (rowErr) throw new Error(rowErr.message);
       }
@@ -141,13 +156,15 @@ function NewProject() {
           <h2 className="tech-label text-blueprint">01 / Photos</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             Add up to 8 reference images — they are all read together. Straight-on shots of each face plus a
-            corner view and a couple of detail close-ups give the best results.
+            corner view and a couple of detail close-ups give the best results. Tell us which side each photo
+            shows and note any size you know — this is the single biggest boost to accuracy.
           </p>
 
 
           <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4">
             {picks.map((p, i) => (
-              <div key={p.url} className="relative aspect-square overflow-hidden rounded border border-border">
+              <div key={p.url} className="space-y-1">
+              <div className="relative aspect-square overflow-hidden rounded border border-border">
                 <img src={p.url} alt={`Upload ${i + 1}`} className="size-full object-cover" />
                 <button
                   type="button"
@@ -157,6 +174,29 @@ function NewProject() {
                 >
                   <X className="size-3" />
                 </button>
+              </div>
+                <select
+                  aria-label={`Which view is photo ${i + 1}?`}
+                  value={p.tag}
+                  onChange={(e) =>
+                    setPicks((l) => l.map((x, idx) => (idx === i ? { ...x, tag: e.target.value } : x)))
+                  }
+                  className="w-full rounded border border-border bg-background px-1 py-1 text-xs"
+                >
+                  {VIEW_TAGS.map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+                <input
+                  aria-label={`Note for photo ${i + 1}`}
+                  placeholder="Note, e.g. door is 80in"
+                  value={p.note}
+                  maxLength={200}
+                  onChange={(e) =>
+                    setPicks((l) => l.map((x, idx) => (idx === i ? { ...x, note: e.target.value } : x)))
+                  }
+                  className="w-full rounded border border-border bg-background px-1 py-1 text-xs"
+                />
               </div>
             ))}
             {picks.length < 8 && (
